@@ -10,6 +10,7 @@ const API = {
   IMPUTE_URL: '/station/impute',
   REPAIR_URL: '/station/repair',
   SAVE_IMPUTE_URL: '/station/save',
+  DECOMPOSE_URL: '/api/decompose',
 }
 
 export const reqStationInfo = (
@@ -48,3 +49,6 @@ export const reqSaveImputeResult = (data) =>
   request.post(API.SAVE_IMPUTE_URL, data)
 
 export const reqRunProcess = (date) => request.get('/preprocess/run-process'+`?process_date=${date}`)
+
+export const reqDecomposeSignal = (date) => 
+  request.get(API.DECOMPOSE_URL + `?date=${date}`)

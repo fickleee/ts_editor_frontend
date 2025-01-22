@@ -1,4 +1,5 @@
 <script setup>
+import SignalDecomposition from './components/SignalDecomposition.vue'
 </script>
 
 <template>
@@ -17,7 +18,7 @@
 
       <!-- 主内容区 - 60% -->
       <main class="w-[60%] bg-white p-4">
-        主内容区
+        <SignalDecomposition />
       </main>
 
       <!-- 右侧边栏 - 20% -->
