@@ -1,32 +1,81 @@
 <script setup>
+import RadialView from './components/RadialView.vue';
+import ProjectionView from './components/ProjectionView.vue';
+import DetailView from './components/DetailView.vue';
+import EditView from './components/EditView.vue';
+import LayerView from './components/LayerView.vue';
+import { BORDER_WIDTH, BORDER_COLOR } from './utils/constants';
 </script>
 
 <template>
   <div class="min-h-screen flex flex-col">
     <!-- 导航栏 -->
-    <nav class="h-[3.7vh] bg-gray-800 text-white flex items-center px-4">
-      <div>导航栏</div>
+    <nav class="h-[6.0vh] bg-white shadow-md flex items-center px-4" 
+        :style="{
+          borderBottomWidth: `${BORDER_WIDTH}px`,
+          borderColor: BORDER_COLOR
+        }">
+      <img 
+        src="./assets/TimeSeries Editor.svg" 
+        alt="Time Series Editor" 
+        class="h-[2vh] w-auto"
+      />
     </nav>
 
-    <!-- 三栏布局 -->
+    <!-- 左右布局 -->
     <div class="flex flex-1">
-      <!-- 左侧边栏 - 20% -->
-      <aside class="w-[20%] bg-gray-100 p-4">
-        左侧栏
+      <!-- 左侧区域 - 33.33% -->
+      <aside class="w-[33.33%] flex flex-col" 
+            :style="{
+              borderRightWidth: `${BORDER_WIDTH}px`,
+              borderColor: BORDER_COLOR
+            }">
+        <!-- 上部区域 -->
+        <div class="flex-1 bg-white" 
+            :style="{
+              borderBottomWidth: `${BORDER_WIDTH}px`,
+              borderColor: BORDER_COLOR
+            }">
+          <RadialView />
+        </div>
+        <!-- 下部区域 - 左右布局 -->
+        <div class="flex flex-1">
+          <!-- 左侧下部 - 1.7 -->
+          <div class="w-[63.64%] bg-white" 
+              :style="{
+                borderRightWidth: `${BORDER_WIDTH}px`,
+                borderColor: BORDER_COLOR
+              }">
+            <ProjectionView />
+          </div>
+          <!-- 右侧下部 - 1 -->
+          <div class="w-[36.36%] bg-white">
+            <DetailView />
+          </div>
+        </div>
       </aside>
 
-      <!-- 主内容区 - 60% -->
-      <main class="w-[60%] bg-white p-4">
-        主内容区
+      <!-- 右侧区域 - 66.67% -->
+      <main class="w-[66.67%] bg-gray-100 flex flex-col">
+        <!-- 上部区域 -->
+        <div class="flex-1 bg-white" 
+            :style="{
+              borderBottomWidth: `${BORDER_WIDTH}px`,
+              borderColor: BORDER_COLOR
+            }">
+          <EditView />
+        </div>
+        <!-- 下部区域 -->
+        <div class="flex-1 bg-white">
+          <LayerView />
+        </div>
       </main>
-
-      <!-- 右侧边栏 - 20% -->
-      <aside class="w-[20%] bg-gray-100 p-4">
-        右侧栏
-      </aside>
     </div>
   </div>
 </template>
 
 <style scoped>
+[style*="border"] {
+  border-style: solid;
+}
 </style>
