@@ -1,11 +1,9 @@
-<template>
-  <div>
-    <h1>Edit View</h1>
-  </div>
-</template>
-
 <script setup>
+import TimeSeriesEditor from './TimeSeriesEditor.vue';
 </script>
 
-<style scoped>
-</style> 
+<template>
+  <div class="h-full">
+    <TimeSeriesEditor />
+  </div>
+</template>

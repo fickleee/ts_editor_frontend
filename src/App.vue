@@ -3,7 +3,6 @@ import RadialView from './components/RadialView.vue';
 import ProjectionView from './components/ProjectionView.vue';
 import DetailView from './components/DetailView.vue';
 import EditView from './components/EditView.vue';
-import LayerView from './components/LayerView.vue';
 import { BORDER_WIDTH, BORDER_COLOR } from './utils/constants';
 </script>
 
@@ -64,10 +63,6 @@ import { BORDER_WIDTH, BORDER_COLOR } from './utils/constants';
               borderColor: BORDER_COLOR
             }">
           <EditView />
-        </div>
-        <!-- 下部区域 -->
-        <div class="flex-1 bg-white">
-          <LayerView />
         </div>
       </main>
     </div>
