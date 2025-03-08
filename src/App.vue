@@ -4,6 +4,7 @@ import ProjectionView from './components/ProjectionView.vue';
 import DetailView from './components/DetailView.vue';
 import EditView from './components/EditView.vue';
 import { BORDER_WIDTH, BORDER_COLOR } from './utils/constants';
+import MatrixView from './components/MatrixView.vue';
 </script>
 
 <template>
@@ -35,7 +36,7 @@ import { BORDER_WIDTH, BORDER_COLOR } from './utils/constants';
               borderBottomWidth: `${BORDER_WIDTH}px`,
               borderColor: BORDER_COLOR
             }">
-          <RadialView />
+          <MatrixView />
         </div>
         <!-- 下部区域 - 左右布局 -->
         <div class="flex flex-1">
