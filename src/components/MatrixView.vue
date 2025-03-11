@@ -19,7 +19,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import * as d3 from 'd3';
-import { reqDataStep, reqDataDistribution } from '@/api';
+import { reqDataStep, reqDataDistribution, reqDataOriginal } from '@/api';
 
 const container = ref(null);
 const userOverviewChart = ref(null);
@@ -246,6 +246,9 @@ const fetchData = async () => {
   try {
     // 获取用户概览数据
     const overviewRes = await reqDataStep();
+    const originalRes = await reqDataOriginal('step');
+    console.log(originalRes);
+    
     allUserData.value = overviewRes;
     if (userOverviewChart.value) {
       setTimeout(() => {

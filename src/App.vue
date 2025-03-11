@@ -5,12 +5,14 @@ import DetailView from './components/DetailView.vue';
 import EditView from './components/EditView.vue';
 import { BORDER_WIDTH, BORDER_COLOR } from './utils/constants';
 import MatrixView from './components/MatrixView.vue';
+import MatrixChart from './components/MatrixChart.vue';
+import NavBar from './components/NavBar.vue';
 </script>
 
 <template>
   <div class="min-h-screen flex flex-col">
     <!-- 导航栏 -->
-    <nav class="h-[6.0vh] bg-white shadow-md flex items-center px-4" 
+    <!-- <nav class="h-[6.0vh] bg-white shadow-md flex items-center px-4" 
         :style="{
           borderBottomWidth: `${BORDER_WIDTH}px`,
           borderColor: BORDER_COLOR
@@ -20,7 +22,8 @@ import MatrixView from './components/MatrixView.vue';
         alt="Time Series Editor" 
         class="h-[2vh] w-auto"
       />
-    </nav>
+    </nav> -->
+    <NavBar />
 
     <!-- 左右布局 -->
     <div class="flex flex-1">
@@ -36,7 +39,7 @@ import MatrixView from './components/MatrixView.vue';
               borderBottomWidth: `${BORDER_WIDTH}px`,
               borderColor: BORDER_COLOR
             }">
-          <MatrixView />
+          <MatrixChart />
         </div>
         <!-- 下部区域 - 左右布局 -->
         <div class="flex flex-1">
