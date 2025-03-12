@@ -19,6 +19,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 import * as d3 from 'd3';
 import { reqDataStep, reqDataWeek, reqDataOriginal } from '@/api';
 import { useDatasetStore } from '../stores/datasetStore';
+import { ElMessage } from 'element-plus';
 
 const container = ref(null);
 const overviewChart = ref(null);
@@ -52,8 +53,6 @@ const createOverviewChart = (data, container) => {
     console.warn('No original data received for overview');
     return;
   }
-
-  console.log('Original data structure:', data[0]);
 
   // 清除已有的图表
   d3.select(container).selectAll('*').remove();
@@ -132,8 +131,6 @@ const createOverviewChart = (data, container) => {
       }
     }
   });
-  
-  console.log(aggregatedData);
   
   
   // 检查是否有数据
@@ -411,7 +408,6 @@ const showUserDayDetail = (data, userId, day, detailGroup, width, height, aggreg
       });
     }
   }
-  console.log(dayAggregatedData);
   
   // 创建线生成器
   const line = d3.line()
@@ -480,26 +476,6 @@ const createLineChart = (data, container) => {
     .append('svg')
     .attr('width', containerWidth)
     .attr('height', totalHeight);
-  
-  // 添加滚轮缩放事件监听
-  svg.on('wheel', function(event) {
-    // 阻止默认滚动行为
-    event.preventDefault();
-    
-    // 检测滚轮方向
-    const direction = event.deltaY < 0 ? 'zoom-in' : 'zoom-out';
-    
-    // 根据当前聚合级别和滚轮方向决定是否需要切换
-    if (direction === 'zoom-in' && aggregationLevel.value === 'week') {
-      // 放大 - 从周聚合切换到日聚合
-      aggregationLevel.value = 'day';
-      fetchAggregatedData('day');
-    } else if (direction === 'zoom-out' && aggregationLevel.value === 'day') {
-      // 缩小 - 从日聚合切换到周聚合
-      aggregationLevel.value = 'week';
-      fetchAggregatedData('week');
-    }
-  });
 
   // 计算所有数据的时间范围
   const timeRange = [0, data[0].res.length - 1];
@@ -525,6 +501,20 @@ const createLineChart = (data, container) => {
     value: sum / userCount
   }));
   
+  // 计算所有用户数据的全局值范围
+  const allValues = data.flatMap(user => user.res.map(point => point.value));
+  const minValue = d3.min(allValues) || 0;
+  const maxValue = d3.max(allValues) || 1;
+
+  // 创建全局比例尺
+  const xScale = d3.scaleLinear()
+    .domain(timeRange)
+    .range([60, containerWidth - 20]);
+
+  const yScale = d3.scaleLinear()
+    .domain([minValue, maxValue])
+    .range([userStripHeight - 20, 20]);
+
   // 为每个用户创建一个组
   data.forEach((user, userIndex) => {
     // 检查用户数据
@@ -536,7 +526,7 @@ const createLineChart = (data, container) => {
     const userGroup = svg.append('g')
       .attr('class', `user-${user.id || userIndex}`)
       .attr('transform', `translate(0, ${userIndex * userStripHeight})`);
-    
+
     // 添加用户背景和边框
     userGroup.append('rect')
       .attr('x', 0)
@@ -546,22 +536,6 @@ const createLineChart = (data, container) => {
       .attr('fill', 'white')
       .attr('stroke', '#e5e7eb')
       .attr('stroke-width', 1);
-    
-    // 计算该用户数据的值范围
-    const values = user.res.map(item => item && typeof item.value === 'number' ? item.value : 0);
-    // 将平均值也纳入范围计算，确保平均线也在视图内
-    const allValues = [...values, ...avgData.map(d => d.value)];
-    const minValue = d3.min(allValues) || 0;
-    const maxValue = d3.max(allValues) || 1; // 避免最小值和最大值相同
-    
-    // 创建比例尺
-    const xScale = d3.scaleLinear()
-      .domain(timeRange)
-      .range([60, containerWidth - 20]); // 左侧留出空间显示用户ID
-    
-    const yScale = d3.scaleLinear()
-      .domain([minValue, maxValue])
-      .range([userStripHeight - 20, 20]); // 留出上下边距
     
     // 添加X轴网格线
     const xTicks = 12; // 每两小时一条线
@@ -576,7 +550,7 @@ const createLineChart = (data, container) => {
         .attr('stroke-width', 0.5)
         .attr('stroke-dasharray', '3,3');
     }
-    
+
     // 添加Y轴网格线
     const yTicks = 5;
     for (let i = 0; i <= yTicks; i++) {
@@ -596,13 +570,13 @@ const createLineChart = (data, container) => {
       .x((d, i) => xScale(i))
       .y(d => yScale(d.value))
       .curve(d3.curveMonotoneX);
-    
+
     // 创建折线生成器 - 平均数据
     const avgLine = d3.line()
       .x((d, i) => xScale(i))
       .y(d => yScale(d.value))
       .curve(d3.curveMonotoneX);
-    
+
     // 先绘制平均线（在下层）
     userGroup.append('path')
       .datum(avgData)
@@ -613,7 +587,7 @@ const createLineChart = (data, container) => {
       .attr('stroke-width', 1.5)
       .attr('stroke-dasharray', '5,3') // 虚线样式
       .attr('stroke-opacity', 0.6); // 半透明
-    
+
     // 绘制用户数据线（在上层）
     userGroup.append('path')
       .datum(user.res)
@@ -622,7 +596,7 @@ const createLineChart = (data, container) => {
       .attr('fill', 'none')
       .attr('stroke', '#2196F3')
       .attr('stroke-width', 2);
-    
+
     // 添加用户标签
     userGroup.append('text')
       .attr('x', 10)
@@ -632,7 +606,7 @@ const createLineChart = (data, container) => {
       .attr('font-size', '14px')
       .attr('font-weight', 'bold')
       .attr('fill', '#374151');
-    
+
     // 添加时间刻度
     for (let i = 0; i <= 24; i += 4) {
       const hourIndex = Math.floor(timeRange[1] * (i / 24));
@@ -755,9 +729,33 @@ watch([allUserData, originalData], ([newUserData, newOriginalData]) => {
 }, { deep: true });
 
 // 监听聚合级别变化
-watch(aggregationLevel, (newLevel) => {
-  console.log(`Aggregation level changed to: ${newLevel}`);
-});
+watch(() => datasetStore.aggregationLevel, async (newLevel) => {
+  // 检查是否选择了数据集
+  if (!datasetStore.getCurrentDataset) {
+    console.warn('No dataset selected');
+    ElMessage.warning('Please select a dataset first');
+    return;
+  }
+
+  try {
+    // 根据聚合级别获取不同的数据
+    if (newLevel === 'day') {
+      const stepData = await reqDataStep();
+      allUserData.value = stepData;
+    } else if (newLevel === 'week') {
+      const weekData = await reqDataWeek();
+      allUserData.value = weekData;
+    }
+    
+    // 更新图表
+    if (lineChart.value) {
+      createLineChart(allUserData.value, lineChart.value);
+    }
+  } catch (error) {
+    console.error('Error fetching aggregated data:', error);
+    ElMessage.error('Failed to load aggregated data');
+  }
+}, { immediate: true });
 
 // 监听数据集变化
 watch(() => datasetStore.getCurrentDataset, (newDataset) => {

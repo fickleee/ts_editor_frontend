@@ -48,38 +48,28 @@
       </div>
     </div>
 
-    <!-- Spacer:  This is important to push the buttons to the right -->
+    <!-- 聚合方式切换 Tab -->
+    <div class="flex bg-gray-100 p-1 rounded-lg">
+      <button
+        v-for="option in aggregationOptions"
+        :key="option.value"
+        @click="selectAggregation(option.value)"
+        class="px-3 py-1 text-sm font-medium rounded-md transition-colors duration-200"
+        :class="[
+          currentAggregation === option.value
+            ? 'bg-white text-purple-600 shadow-sm'
+            : 'text-gray-600 hover:text-purple-600'
+        ]"
+      >
+        {{ option.label }}
+      </button>
+    </div>
+
+    <!-- Spacer -->
     <div class="flex-1"></div>
 
-    <!-- Action buttons (Import, Export, Undo, Redo) -->
+    <!-- Action buttons -->
     <div class="flex gap-2">
-      <!-- <button
-        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1"
-        @click="handleImportData"
-        title="Import Data"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 8L12 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M15 13L12 16L9 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M20 16.7428C21.2215 15.734 22 14.2079 22 12.5C22 9.46243 19.5376 7 16.5 7C16.2815 7 16.0771 6.886 15.9661 6.69774C14.6621 4.48484 12.2544 3 9.5 3C5.35786 3 2 6.35786 2 10.5C2 12.5661 2.83545 14.4371 4.18695 15.7935" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Import
-      </button>
-
-      <button
-        class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1"
-        @click="exportAllSeries"
-        title="Export All Series"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 16L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M9 13L12 16L15 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M20 16.7428C21.2215 15.734 22 14.2079 22 12.5C22 9.46243 19.5376 7 16.5 7C16.2815 7 16.0771 6.886 15.9661 6.69774C14.6621 4.48484 12.2544 3 9.5 3C5.35786 3 2 6.35786 2 10.5C2 12.5661 2.83545 14.4371 4.18695 15.7935" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M12 16L12 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Export
-      </button> -->
-
       <button
         class="w-10 h-10 rounded-lg flex items-center justify-center bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
         :disabled="!timeSeriesStore.canUndo"
@@ -114,6 +104,22 @@ const datasetStore = useDatasetStore();
 const timeSeriesStore = useTimeSeriesStore();
 const isOpen = ref(false);
 const datasets = ['step', 'electricity'];
+
+// 聚合方式选项
+const aggregationOptions = [
+  { label: 'By Day', value: 'day' },
+  { label: 'By Week', value: 'week' }
+];
+
+// 当前选中的聚合方式
+const currentAggregation = ref('day');
+
+// 切换聚合方式
+const selectAggregation = (value) => {
+  currentAggregation.value = value;
+  // 触发事件，让 MatrixChart 组件知道聚合方式改变了
+  datasetStore.setAggregationLevel(value);
+};
 
 const selectDataset = (dataset) => {
   datasetStore.setDataset(dataset);
