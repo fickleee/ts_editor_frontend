@@ -1,14 +1,23 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import TimeSeriesChart from './TimeSeriesChart.vue'
 import { downloadCSV } from '../utils/csvUtils'
+import { api } from '../services/api'
 
 const props = defineProps({
   series: Object,
-  isSelected: Boolean
+  isSelected: Boolean,
+  hoverTime: Number
 })
 
 const emit = defineEmits(['click', 'hover'])
+
+const showDecomposition = ref(false)
+const decompositionNumber = ref(2)
+const model = ref('sym8')
+const level = ref(3)
+const isDecomposing = ref(false)
+const decomposedSeries = ref([])
 
 const toggleVisibility = () => {
   props.series.visible = !props.series.visible
@@ -34,20 +43,146 @@ const exportSeries = (event) => {
   event.stopPropagation()
   downloadCSV(props.series.data, `${props.series.id}_export.csv`)
 }
+
+const toggleDecomposition = () => {
+  showDecomposition.value = !showDecomposition.value
+  if (!showDecomposition.value) {
+    decomposedSeries.value = []
+  }
+}
+
+const normalizeTimeSeries = (data) => {
+  // Find min/max values
+  const values = data.map(p => p.value)
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min
+
+  // Normalize values to be non-negative
+  return data.map(point => ({
+    time: point.time,
+    value: range > 0 ? ((point.value - min) / range) * 10 : point.value
+  }))
+}
+
+const applyDecomposition = async () => {
+  try {
+    isDecomposing.value = true
+    
+    const response = await api.decomposeSeries(props.series.data, {
+      decompositionNumber: decompositionNumber.value,
+      model: model.value,
+      level: level.value
+    })
+    
+    const newSeries = []
+    const times = response.times
+
+    if (decompositionNumber.value === 2) {
+      // Normalize low frequency component
+      const lfData = normalizeTimeSeries(
+        response.low_freq.map((value, i) => ({
+          time: times[i],
+          value
+        }))
+      )
+      
+      // Normalize high frequency component
+      const hfData = normalizeTimeSeries(
+        response.high_freq.map((value, i) => ({
+          time: times[i],
+          value
+        }))
+      )
+
+      newSeries.push({
+        id: `${props.series.id}_LF`,
+        data: lfData,
+        type: 'LF',
+        visible: true,
+        parentId: props.series.id
+      })
+      
+      newSeries.push({
+        id: `${props.series.id}_HF`,
+        data: hfData,
+        type: 'HF',
+        visible: true,
+        parentId: props.series.id
+      })
+    } else {
+      // Normalize low frequency component
+      const lfData = normalizeTimeSeries(
+        response.low_freq.map((value, i) => ({
+          time: times[i],
+          value
+        }))
+      )
+      
+      // Normalize mid frequency component
+      const mfData = normalizeTimeSeries(
+        response.mid_freq.map((value, i) => ({
+          time: times[i],
+          value
+        }))
+      )
+      
+      // Normalize high frequency component
+      const hfData = normalizeTimeSeries(
+        response.high_freq.map((value, i) => ({
+          time: times[i],
+          value
+        }))
+      )
+
+      newSeries.push({
+        id: `${props.series.id}_LF`,
+        data: lfData,
+        type: 'LF',
+        visible: true,
+        parentId: props.series.id
+      })
+      
+      newSeries.push({
+        id: `${props.series.id}_MF`,
+        data: mfData,
+        type: 'MF',
+        visible: true,
+        parentId: props.series.id
+      })
+      
+      newSeries.push({
+        id: `${props.series.id}_HF`,
+        data: hfData,
+        type: 'HF',
+        visible: true,
+        parentId: props.series.id
+      })
+    }
+    
+    decomposedSeries.value = newSeries
+    showDecomposition.value = false
+    
+  } catch (error) {
+    console.error('Error decomposing series:', error)
+  } finally {
+    isDecomposing.value = false
+  }
+}
 </script>
 
 <template>
   <div 
-    class="time-series-item p-4 cursor-pointer transition-all duration-200"
+    class="time-series-item p-4 cursor-pointer transition-all duration-200 relative"
     :class="{ 'bg-purple-50 border-l-4 border-purple-500': isSelected }"
     @click="handleClick"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
   >
-    <div class="flex items-center gap-4 mb-2">
+    <div class="absolute left-[-4rem] flex flex-col gap-2">
       <button 
         @click.stop="toggleVisibility" 
-        class="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100"
+        class="w-12 h-12 flex items-center justify-center rounded hover:bg-gray-100"
       >
         <span v-if="series.visible" class="text-gray-800">
           <svg width="19" height="15" viewBox="0 0 19 15" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -62,13 +197,24 @@ const exportSeries = (event) => {
         </span>
       </button>
       
-      <div class="flex items-center gap-2">
-        <span :class="getTypeClass(series.type)">{{ series.type }}</span>
-        <span class="font-medium text-gray-900">{{ series.id }}</span>
-        <span v-if="series.parentId" class="text-sm text-gray-500">
-          from {{ series.parentId }}
-        </span>
-      </div>
+      <button 
+        v-if="series.type === 'original'"
+        @click.stop="toggleDecomposition"
+        class="w-12 h-12 flex items-center justify-center rounded hover:bg-gray-100"
+        title="Decompose series"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="flex items-center gap-2 mb-2">
+      <span :class="getTypeClass(series.type)">{{ series.type }}</span>
+      <span class="font-medium text-gray-900">{{ series.id }}</span>
+      <span v-if="series.parentId" class="text-sm text-gray-500">
+        from {{ series.parentId }}
+      </span>
       
       <button 
         @click.stop="exportSeries"
@@ -85,13 +231,93 @@ const exportSeries = (event) => {
       </button>
     </div>
     
-    <div class="pl-10">
+    <div class="h-[120px]">
       <TimeSeriesChart
         :series="[series]"
-        :height="80"
+        :height="120"
         :showGrid="false"
         :isMainChart="false"
+        :hoverTime="hoverTime"
       />
+    </div>
+
+    <div v-if="showDecomposition" class="mt-4 p-4 bg-gray-50 rounded-lg">
+      <div class="grid grid-cols-3 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            Decomposition number
+          </label>
+          <select
+            v-model="decompositionNumber"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            <option :value="2">2 (High/Low)</option>
+            <option :value="3">3 (High/Mid/Low)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            Model
+          </label>
+          <select
+            v-model="model"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            <option value="sym8">sym8</option>
+            <option value="db4">db4</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            Level: {{ level }}
+          </label>
+          <input
+            v-model="level"
+            type="range"
+            min="3"
+            max="10"
+            class="w-full"
+          />
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button
+          @click="showDecomposition = false"
+          class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+        >
+          Cancel
+        </button>
+        <button
+          @click="applyDecomposition"
+          class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          :disabled="isDecomposing"
+        >
+          {{ isDecomposing ? 'Decomposing...' : 'Apply' }}
+        </button>
+      </div>
+    </div>
+
+    <div v-if="decomposedSeries.length > 0" class="mt-4">
+      <div class="relative">
+        <div v-for="(ds, index) in decomposedSeries" :key="ds.id" class="relative mb-4">
+          <div class="absolute left-[-4rem] top-1/2 -translate-y-1/2 z-10">
+            <span :class="getTypeClass(ds.type)" class="font-bold">{{ ds.type }}</span>
+          </div>
+          
+          <div class="h-[120px]">
+            <TimeSeriesChart
+              :series="[ds]"
+              :height="120"
+              :showGrid="false"
+              :isMainChart="false"
+              :hoverTime="hoverTime"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -111,6 +337,11 @@ const exportSeries = (event) => {
 .time-series-tag.lf {
   background-color: #FEF3C7;
   color: #92400E;
+}
+
+.time-series-tag.mf {
+  background-color: #FCE7F3;
+  color: #9D174D;
 }
 
 .time-series-tag.hf {

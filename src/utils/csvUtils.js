@@ -75,11 +75,6 @@ export function parseCSV(csvText, options = {}) {
         }
         
         time = hours + (minutes / 60)
-      } else if (timeFormat === 'm/d/yyyy hh:mm:ss aa') {
-        // Format like "3/12/2016 12:00:00 AM"
-        const date = new Date(timeStr)
-        if (isNaN(date.getTime())) throw new Error('Invalid date format')
-        time = date.getHours() + (date.getMinutes() / 60) + (date.getSeconds() / 3600)
       } else if (timeFormat === 'iso' || timeFormat === 'date') {
         // ISO date format or general date format
         const date = new Date(timeStr)
@@ -183,7 +178,7 @@ export function formatTime(time, format = 'hh:mm') {
   } else if (format === 'hh:mm:ss') {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   } else {
-    return time.toFixed(2);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   }
 }
 

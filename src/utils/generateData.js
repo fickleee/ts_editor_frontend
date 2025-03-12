@@ -9,18 +9,18 @@ export function generateHouseData(days = 3) {
   const basePattern = (hour) => {
     // Morning peak (7-9 AM)
     if (hour >= 7 && hour <= 9) {
-      return 70 + Math.random() * 20;
+      return 7 + Math.random() * 2;
     }
     // Evening peak (18-22)
     if (hour >= 18 && hour <= 22) {
-      return 80 + Math.random() * 15;
+      return 8 + Math.random() * 1.5;
     }
     // Night/early morning (0-6, 23)
     if (hour <= 6 || hour === 23) {
-      return 30 + Math.random() * 10;
+      return 3 + Math.random();
     }
     // Regular daytime
-    return 50 + Math.random() * 15;
+    return 5 + Math.random() * 1.5;
   };
 
   for (let day = 0; day < days; day++) {
@@ -30,12 +30,12 @@ export function generateHouseData(days = 3) {
       const value = basePattern(hour);
       
       // Add some noise and daily variation
-      const noise = Math.random() * 5 - 2.5;
-      const dailyVariation = Math.sin(day * Math.PI / 2) * 5;
+      const noise = Math.random() * 0.5 - 0.25;
+      const dailyVariation = Math.sin(day * Math.PI / 2) * 0.5;
       
       data.push({
         time: hour,
-        value: Math.max(10, Math.min(100, value + noise + dailyVariation))
+        value: Math.max(1, Math.min(10, value + noise + dailyVariation))
       });
     }
   }

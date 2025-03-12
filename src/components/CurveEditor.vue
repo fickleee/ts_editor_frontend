@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, watch, computed, onBeforeUnmount } from 'vue'
 import * as d3 from 'd3'
 
 const props = defineProps({
@@ -8,7 +8,7 @@ const props = defineProps({
   seriesId: String
 })
 
-const emit = defineEmits(['close', 'change'])
+const emit = defineEmits(['change'])
 
 const editorRef = ref()
 const controlPoints = ref([
@@ -17,13 +17,8 @@ const controlPoints = ref([
   { x: 1, y: 1 }
 ])
 
-// Computed property for the title
-const editorTitle = computed(() => {
-  if (props.seriesId) {
-    return `Curve Editor - Series ${props.seriesId}`
-  }
-  return 'Curve Editor'
-})
+let resizeObserver = null
+let resizeTimeout = null
 
 // Computed property for the preview curve
 const previewCurve = computed(() => {
@@ -51,18 +46,25 @@ const previewCurve = computed(() => {
 const initEditor = () => {
   if (!editorRef.value) return
 
-  const width = 300
-  const height = 300
+  // Get container dimensions
+  const container = editorRef.value
+  const containerWidth = container.clientWidth
+  const containerHeight = Math.min(containerWidth, 300) // Limit height to avoid excessive space
+  
   const margin = { top: 20, right: 20, bottom: 30, left: 30 }
+  const width = containerWidth
+  const height = containerHeight
 
   // Clear previous SVG
-  d3.select(editorRef.value).selectAll('*').remove()
+  d3.select(container).selectAll('*').remove()
 
-  // Create SVG
-  const svg = d3.select(editorRef.value)
+  // Create SVG with viewBox for better scaling
+  const svg = d3.select(container)
     .append('svg')
-    .attr('width', width)
-    .attr('height', height)
+    .attr('width', '100%')
+    .attr('height', '100%')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet')
 
   const g = svg.append('g')
     .attr('transform', `translate(${margin.left},${margin.top})`)
@@ -169,13 +171,16 @@ const initEditor = () => {
         }
 
         // Update visual elements
-        d3.select(event.sourceEvent.target)
+        d3.select(event.sourceEvent. target)
           .attr('cx', xScale(d.x))
           .attr('cy', yScale(d.y))
         
         // Update the preview curve
         path.datum(previewCurve.value)
           .attr('d', line)
+
+        // Emit change event
+        emit('change', controlPoints.value)
       }))
 
   // Add axes
@@ -193,63 +198,6 @@ const initEditor = () => {
 
   g.append('g')
     .call(yAxis)
-    
-  // Add button to add control point
-  const addPointButton = d3.select(editorRef.value)
-    .append('button')
-    .attr('class', 'add-point-btn')
-    .text('Add Control Point')
-    .style('position', 'absolute')
-    .style('top', '10px')
-    .style('right', '10px')
-    .style('padding', '4px 8px')
-    .style('background-color', '#f3e8ff')
-    .style('color', '#7e22ce')
-    .style('border', '1px solid #d8b4fe')
-    .style('border-radius', '4px')
-    .style('cursor', 'pointer')
-    
-  addPointButton.on('click', () => {
-    // Find a good position for the new point
-    const points = controlPoints.value
-    if (points.length >= 8) return // Limit to 8 points
-    
-    // Find the largest gap between points
-    let maxGap = 0
-    let insertIndex = 1
-    
-    for (let i = 0; i < points.length - 1; i++) {
-      const gap = points[i+1].x - points[i].x
-      if (gap > maxGap) {
-        maxGap = gap
-        insertIndex = i + 1
-      }
-    }
-    
-    // Insert a new point in the middle of the largest gap
-    const newX = (points[insertIndex-1].x + points[insertIndex].x) / 2
-    const newY = (points[insertIndex-1].y + points[insertIndex].y) / 2
-    
-    points.splice(insertIndex, 0, { x: newX, y: newY })
-    
-    // Redraw the editor
-    initEditor()
-  })
-}
-
-const handleApply = () => {
-  emit('change', controlPoints.value, props.seriesId)
-  emit('close')
-}
-
-const handleReset = () => {
-  // Reset to linear curve
-  controlPoints.value = [
-    { x: 0, y: 0 },
-    { x: 0.5, y: 0.5 },
-    { x: 1, y: 1 }
-  ]
-  initEditor()
 }
 
 // Preset curves
@@ -301,28 +249,80 @@ const applyPreset = (preset) => {
       ]
       break
   }
-  initEditor()
+  emit('change', controlPoints.value)
 }
 
-// Prevent clicks in the dialog from propagating to the background
-const handleDialogClick = (event) => {
-  event.stopPropagation()
+const resetToDefault = () => {
+  controlPoints.value = [
+    { x: 0, y: 0 },
+    { x: 0.5, y: 0.5 },
+    { x: 1, y: 1 }
+  ]
+  emit('change', controlPoints.value)
+}
+
+const addControlPoint = () => {
+  // Find a good position for the new point
+  const points = controlPoints.value
+  if (points.length >= 8) return // Limit to 8 points
+  
+  // Find the largest gap between points
+  let maxGap = 0
+  let insertIndex = 1
+  
+  for (let i = 0; i < points.length - 1; i++) {
+    const gap = points[i+1].x - points[i].x
+    if (gap > maxGap) {
+      maxGap = gap
+      insertIndex = i + 1
+    }
+  }
+  
+  // Insert a new point in the middle of the largest gap
+  const newX = (points[insertIndex-1].x + points[insertIndex].x) / 2
+  const newY = (points[insertIndex-1].y + points[insertIndex].y) / 2
+  
+  points.splice(insertIndex, 0, { x: newX, y: newY })
+  emit('change', points)
+}
+
+// Handle resize with debouncing
+const handleResize = () => {
+  if (resizeTimeout) {
+    clearTimeout(resizeTimeout)
+  }
+  
+  resizeTimeout = setTimeout(() => {
+    if (props.visible) {
+      initEditor()
+    }
+  }, 100)
 }
 
 onMounted(() => {
   if (props.visible) {
     initEditor()
   }
+  
+  // Set up resize observer with debouncing
+  resizeObserver = new ResizeObserver(handleResize)
+  
+  if (editorRef.value) {
+    resizeObserver.observe(editorRef.value)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+  }
+  if (resizeTimeout) {
+    clearTimeout(resizeTimeout)
+  }
 })
 
 watch(() => props.visible, (visible) => {
   if (visible) {
-    // Reset to default curve when opening
-    controlPoints.value = [
-      { x: 0, y: 0 },
-      { x: 0.5, y: 0.5 },
-      { x: 1, y: 1 }
-    ]
     initEditor()
   }
 })
@@ -333,89 +333,54 @@ watch(() => controlPoints.value, () => {
     initEditor()
   }
 }, { deep: true })
+
+// Expose methods to parent
+defineExpose({
+  applyPreset,
+  resetToDefault
+})
 </script>
 
 <template>
-  <div v-if="visible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.self="emit('close')">
-    <div class="bg-white rounded-lg p-6 max-w-xl" @click="handleDialogClick">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-medium">{{ editorTitle }}</h3>
-        <button @click="emit('close')" class="text-gray-500 hover:text-gray-700">✕</button>
-      </div>
+  <div class="flex flex-col h-full">
+    <div class="flex-1 overflow-hidden">
+      <div ref="editorRef" class="w-full h-full"></div>
       
-      <!-- Presets -->
-      <div class="mb-4">
-        <p class="text-sm text-gray-600 mb-2">Presets:</p>
-        <div class="flex flex-wrap gap-2">
-          <button 
-            @click="applyPreset('ease-in')" 
-            class="px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
-          >
-            Ease In
-          </button>
-          <button 
-            @click="applyPreset('ease-out')" 
-            class="px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
-          >
-            Ease Out
-          </button>
-          <button 
-            @click="applyPreset('ease-in-out')" 
-            class="px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
-          >
-            Ease In-Out
-          </button>
-          <button 
-            @click="applyPreset('s-curve')" 
-            class="px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
-          >
-            S-Curve
-          </button>
-          <button 
-            @click="applyPreset('step')" 
-            class="px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
-          >
-            Step
-          </button>
-        </div>
-      </div>
-      
-      <div class="relative">
-        <div ref="editorRef" class="curve-editor"></div>
-        
-        <div class="text-xs text-gray-500 mt-2">
-          <p>Drag control points to adjust the curve. End points can only move vertically.</p>
-        </div>
-      </div>
-      
-      <div class="mt-4 flex justify-end gap-2">
-        <button
-          @click="handleReset"
-          class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-        >
-          Reset
-        </button>
-        <button
-          @click="emit('close')"
-          class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-        >
-          Cancel
-        </button>
-        <button
-          @click="handleApply"
-          class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
-        >
-          Apply
-        </button>
+      <div class="text-xs text-gray-500 mt-2">
+        <p>Drag control points to adjust the curve. End points can only move vertically.</p>
       </div>
     </div>
+
+    <button 
+      @click="addControlPoint"
+      class="mt-4 w-full px-3 py-2 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100 border border-purple-200"
+    >
+      Add Control Point
+    </button>
   </div>
 </template>
 
 <style scoped>
-.curve-editor {
-  width: 300px;
-  height: 300px;
-  position: relative;
+:deep(.grid line) {
+  stroke: #e5e7eb;
+  stroke-width: 0.5;
+}
+
+:deep(.x-axis path),
+:deep(.y-axis path) {
+  stroke: none;
+}
+
+:deep(.x-axis line),
+:deep(.y-axis line) {
+  stroke: #e5e7eb;
+  stroke-width: 1;
+}
+
+:deep(.x-axis text),
+:deep(.y-axis text) {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  fill: #6b7280;
 }
 </style>

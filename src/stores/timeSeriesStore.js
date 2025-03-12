@@ -11,14 +11,15 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
 
   const selectedTimeRange = ref(null)
   const selectedSeries = ref([])
+  const previewSeries = ref(null)
 
   const initializeData = () => {
     // Generate data for three consecutive days
-    const dates = ['2.13', '2.14', '2.15']
-    dates.forEach(date => {
+    const defaultSeries = ['Default 1', 'Default 2', 'Default 3']
+    defaultSeries.forEach((name, index) => {
       const data = generateHouseData(1) // Generate one day of data
       addSeries({
-        id: date,
+        id: name,
         data,
         type: 'original',
         visible: true
@@ -50,6 +51,37 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   const clearSelection = () => {
     selectedTimeRange.value = null
     selectedSeries.value = []
+  }
+
+  const setPreviewSeries = (pattern) => {
+    if (!pattern || !selectedTimeRange.value) {
+      previewSeries.value = null
+      return
+    }
+
+    const { start, end } = selectedTimeRange.value
+    const duration = end - start
+
+    // Create preview series with pattern data adjusted to selection range
+    const previewData = pattern.data.map(point => {
+      const normalizedTime = (point.time - pattern.start) / (pattern.end - pattern.start)
+      const newTime = start + normalizedTime * duration
+      return {
+        time: newTime,
+        value: point.value
+      }
+    }).sort((a, b) => a.time - b.time)
+
+    previewSeries.value = {
+      id: 'preview',
+      data: previewData,
+      type: 'preview',
+      visible: true
+    }
+  }
+
+  const clearPreviewSeries = () => {
+    previewSeries.value = null
   }
 
   const moveSeries = (seriesId, offset) => {
@@ -280,80 +312,72 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     saveState()
   }
 
-  const findSimilarPatterns = (specificSeriesId) => {
-    if (!selectedTimeRange.value) return []
+  const findSimilarPatterns = (seriesId) => {
+    if (!selectedTimeRange.value || !seriesId) return []
     
-    // Use either the specific series ID or all selected series
-    const seriesToSearch = specificSeriesId 
-      ? [specificSeriesId] 
-      : selectedSeries.value
-
-    if (seriesToSearch.length === 0) return []
+    const sourceSeries = series.value.find(s => s.id === seriesId)
+    if (!sourceSeries) return []
 
     const patterns = []
     const { start, end } = selectedTimeRange.value
     const duration = end - start
 
-    // Get the values at the boundaries of the selection
-    seriesToSearch.forEach(id => {
-      const sourceSeries = series.value.find(s => s.id === id)
-      if (!sourceSeries) return
+    // Get values at selection boundaries
+    const sourceData = sourceSeries.data
+    const leftValue = interpolateValue(sourceData, start)
+    const rightValue = interpolateValue(sourceData, end)
 
-      const sourceData = sourceSeries.data
+    // Get the selected pattern data
+    const selectedPattern = sourceData.filter(p => 
+      p && !isNaN(p.time) && !isNaN(p.value) && 
+      p.time >= start && p.time <= end
+    )
+
+    // Sliding window through the data
+    for (let i = 0; i < sourceData.length; i++) {
+      const point = sourceData[i]
+      if (!point || isNaN(point.time) || isNaN(point.value)) continue
       
-      // Get values at selection boundaries
-      const leftValue = interpolateValue(sourceData, start)
-      const rightValue = interpolateValue(sourceData, end)
+      const windowStart = point.time
+      const windowEnd = windowStart + duration
 
-      // Sliding window through the data
-      for (let i = 0; i < sourceData.length; i++) {
-        const point = sourceData[i]
-        if (!point || isNaN(point.time) || isNaN(point.value)) continue
-        
-        const windowStart = point.time
-        const windowEnd = windowStart + duration
+      if (windowEnd > 24) break
 
-        if (windowEnd > 24) break
+      // Skip the current selection to avoid recommending the same pattern
+      if (Math.abs(windowStart - start) < 0.1 && Math.abs(windowEnd - end) < 0.1) continue
 
-        // Skip the current selection to avoid recommending the same pattern
-        if (Math.abs(windowStart - start) < 0.1 && Math.abs(windowEnd - end) < 0.1) continue
+      const windowData = sourceData.filter(p => 
+        p && !isNaN(p.time) && !isNaN(p.value) && 
+        p.time >= windowStart && p.time <= windowEnd
+      )
+      
+      if (windowData.length < 2) continue
 
-        const windowData = sourceData.filter(p => 
-          p && !isNaN(p.time) && !isNaN(p.value) && 
-          p.time >= windowStart && p.time <= windowEnd
-        )
-        
-        if (windowData.length < 2) continue
+      // Get values at window boundaries
+      const windowLeftValue = interpolateValue(sourceData, windowStart)
+      const windowRightValue = interpolateValue(sourceData, windowEnd)
 
-        // Get values at window boundaries
-        const windowLeftValue = interpolateValue(sourceData, windowStart)
-        const windowRightValue = interpolateValue(sourceData, windowEnd)
+      // Calculate similarity based on both shape and boundary values
+      const shapeSimilarity = calculateShapeSimilarity(selectedPattern, windowData)
 
-        // Calculate similarity based on both shape and boundary values
-        const shapeSimilarity = calculateShapeSimilarity(
-          sourceData.filter(p => p && !isNaN(p.time) && !isNaN(p.value) && p.time >= start && p.time <= end),
-          windowData
-        )
+      const boundaryDiff = Math.abs(leftValue - windowLeftValue) + Math.abs(rightValue - windowRightValue)
+      const boundarySimilarity = 1 / (1 + boundaryDiff / 100)
 
-        const boundaryDiff = Math.abs(leftValue - windowLeftValue) + Math.abs(rightValue - windowRightValue)
-        const boundarySimilarity = 1 / (1 + boundaryDiff / 100)
+      // Combine both similarities with weights
+      const similarity = shapeSimilarity * 0.7 + boundarySimilarity * 0.3
 
-        // Combine both similarities with weights
-        const similarity = shapeSimilarity * 0.7 + boundarySimilarity * 0.3
-
-        // Only include patterns with high similarity
-        if (similarity > 0.7) {
-          patterns.push({
-            start: windowStart,
-            end: windowEnd,
-            data: windowData,
-            similarity,
-            leftValue: windowLeftValue,
-            rightValue: windowRightValue
-          })
-        }
+      // Only include patterns with high similarity
+      if (similarity > 0.7) {
+        patterns.push({
+          start: windowStart,
+          end: windowEnd,
+          data: windowData,
+          similarity,
+          leftValue: windowLeftValue,
+          rightValue: windowRightValue
+        })
       }
-    })
+    }
 
     // Sort by similarity (higher is better) and remove duplicates
     return patterns
@@ -364,7 +388,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
           Math.abs(p.end - pattern.end) < 0.1
         )
       )
-      .slice(0, 5) // Return top 5 patterns
+      .slice(0, 3) // Show only top 3 patterns
   }
 
   const interpolateValue = (data, time) => {
@@ -445,155 +469,116 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     return 1 / (1 + Math.sqrt(sumSquaredDiff / samples))
   }
 
-  const replaceWithPattern = (pattern, specificSeriesIds) => {
-    if (!selectedTimeRange.value) return
-
-    // Use either the specific series IDs or all selected series
-    const seriesToReplace = specificSeriesIds || selectedSeries.value
-    if (seriesToReplace.length === 0) return
+  const replaceWithPattern = (pattern, seriesId) => {
+    if (!selectedTimeRange.value || !seriesId) return
 
     const { start, end } = selectedTimeRange.value
     const duration = end - start
 
-    seriesToReplace.forEach(id => {
-      const seriesIndex = series.value.findIndex(s => s.id === id)
-      if (seriesIndex === -1) return
+    const seriesIndex = series.value.findIndex(s => s.id === seriesId)
+    if (seriesIndex === -1) return
 
-      // Create a deep copy of the data to avoid mutation issues
-      const newData = JSON.parse(JSON.stringify(series.value[seriesIndex].data))
+    // Create a deep copy of the data to avoid mutation issues
+    const newData = JSON.parse(JSON.stringify(series.value[seriesIndex].data))
+    
+    // Get values at selection boundaries for smooth transition
+    const leftValue = interpolateValue(newData, start)
+    const rightValue = interpolateValue(newData, end)
+    
+    // Get values at pattern boundaries
+    const patternLeftValue = pattern.leftValue
+    const patternRightValue = pattern.rightValue
+    
+    // Calculate scale and offset for value adjustment to match boundaries
+    const patternData = pattern.data.filter(p => 
+      p && p.time !== null && p.time !== undefined && 
+      p.value !== null && p.value !== undefined && 
+      !isNaN(p.time) && !isNaN(p.value)
+    )
+    
+    if (patternData.length < 2) return
+    
+    const patternMin = Math.min(...patternData.map(p => p.value))
+    const patternMax = Math.max(...patternData.map(p => p.value))
+    
+    // Remove existing points in the selection range
+    for (let i = newData.length - 1; i >= 0; i--) {
+      const point = newData[i]
+      if (point && !isNaN(point.time) && point.time >= start && point.time <= end) {
+        newData.splice(i, 1)
+      }
+    }
+    
+    // Add new points from the pattern with time adjustment
+    patternData.forEach(point => {
+      // Normalize the time to fit the selection range
+      const normalizedTime = (point.time - pattern.start) / (pattern.end - pattern.start)
+      const newTime = start + normalizedTime * duration
       
-      // Get values at selection boundaries for smooth transition
-      const leftValue = interpolateValue(newData, start)
-      const rightValue = interpolateValue(newData, end)
+      // Adjust value to match boundary conditions
+      let adjustedValue = point.value
       
-      // Get values at pattern boundaries
-      const patternLeftValue = pattern.leftValue
-      const patternRightValue = pattern.rightValue
-      
-      // Calculate scale and offset for value adjustment to match boundaries
-      const patternData = pattern.data.filter(p => 
-        p && p.time !== null && p.time !== undefined && 
-        p.value !== null && p.value !== undefined && 
-        !isNaN(p.time) && !isNaN(p.value)
-      )
-      
-      if (patternData.length < 2) return
-      
-      const patternMin = Math.min(...patternData.map(p => p.value))
-      const patternMax = Math.max(...patternData.map(p => p.value))
-      
-      // Remove existing points in the selection range
-      for (let i = newData.length - 1; i >= 0; i--) {
-        const point = newData[i]
-        if (point && !isNaN(point.time) && point.time >= start && point.time <= end) {
-          newData.splice(i, 1)
-        }
+      // Apply boundary matching
+      if (normalizedTime < 0.1) {
+        // Blend with left boundary
+        const blendFactor = normalizedTime / 0.1
+        adjustedValue = leftValue * (1 - blendFactor) + point.value * blendFactor
+      } else if (normalizedTime > 0.9) {
+        // Blend with right boundary
+        const blendFactor = (normalizedTime - 0.9) / 0.1
+        adjustedValue = point.value * (1 - blendFactor) + rightValue * blendFactor
       }
       
-      // Add new points from the pattern with time adjustment
-      patternData.forEach(point => {
-        // Normalize the time to fit the selection range
-        const normalizedTime = (point.time - pattern.start) / (pattern.end - pattern.start)
-        const newTime = start + normalizedTime * duration
-        
-        // Adjust value to match boundary conditions
-        let adjustedValue = point.value
-        
-        // Apply boundary matching
-        if (normalizedTime < 0.1) {
-          // Blend with left boundary
-          const blendFactor = normalizedTime / 0.1
-          adjustedValue = leftValue * (1 - blendFactor) + point.value * blendFactor
-        } else if (normalizedTime > 0.9) {
-          // Blend with right boundary
-          const blendFactor = (normalizedTime - 0.9) / 0.1
-          adjustedValue = point.value * (1 - blendFactor) + rightValue * blendFactor
-        }
-        
-        newData.push({
-          time: newTime,
-          value: adjustedValue
-        })
+      newData.push({
+        time: newTime,
+        value: adjustedValue
       })
-      
-      // Sort data by time
-      newData.sort((a, b) => a.time - b.time)
-      
-      // Apply smooth transitions at boundaries
-      const transitionRange = 0.5 // Hours for transition
-      const startTransition = Math.max(0, start - transitionRange)
-      const endTransition = Math.min(24, end + transitionRange)
-      
-      // Apply smooth transitions outside the selection
-      for (let i = 0; i < newData.length; i++) {
-        const point = newData[i]
-        if (!point || isNaN(point.time) || isNaN(point.value)) continue
-        
-        if (point.time >= startTransition && point.time < start) {
-          // Smooth transition before selection
-          const progress = (point.time - startTransition) / transitionRange
-          const easeProgress = d3.easeCubicInOut(progress)
-          
-          const originalValue = point.value
-          const nextPoint = newData.find(p => p && !isNaN(p.time) && !isNaN(p.value) && p.time >= start)
-          if (nextPoint) {
-            newData[i].value = originalValue * (1 - easeProgress) + nextPoint.value * easeProgress
-          }
-        } else if (point.time > end && point.time <= endTransition) {
-          // Smooth transition after selection
-          const progress = (point.time - end) / transitionRange
-          const easeProgress = d3.easeCubicInOut(progress)
-          
-          const originalValue = point.value
-          const prevPoints = newData.filter(p => p && !isNaN(p.time) && !isNaN(p.value) && p.time <= end)
-          const prevPoint = prevPoints.length > 0 ? prevPoints[prevPoints.length - 1] : null
-          
-          if (prevPoint) {
-            newData[i].value = prevPoint.value * (1 - easeProgress) + originalValue * easeProgress
-          }
-        }
-      }
-      
-      // Update series with new data
-      series.value[seriesIndex] = {
-        ...series.value[seriesIndex],
-        data: newData
-      }
     })
     
-    saveState()
-  }
-
-  const generateFromPattern = (pattern, targetTime) => {
-    if (!selectedTimeRange.value || !selectedSeries.value.length) return
-
-    selectedSeries.value.forEach(id => {
-      const sourceSeries = series.value.find(s => s.id === id)
-      if (!sourceSeries) return
-
-      // Filter out invalid points
-      const validPatternData = pattern.data.filter(p => 
-        p && p.time !== null && p.time !== undefined && 
-        p.value !== null && p.value !== undefined && 
-        !isNaN(p.time) && !isNaN(p.value)
-      )
+    // Sort data by time
+    newData.sort((a, b) => a.time - b.time)
+    
+    // Apply smooth transitions at boundaries
+    const transitionRange = 0.5 // Hours for transition
+    const startTransition = Math.max(0, start - transitionRange)
+    const endTransition = Math.min(24, end + transitionRange)
+    
+    // Apply smooth transitions outside the selection
+    for (let i = 0; i < newData.length; i++) {
+      const point = newData[i]
+      if (!point || isNaN(point.time) || isNaN(point.value)) continue
       
-      // Create new series with the pattern data
-      const newData = validPatternData.map(point => ({
-        time: point.time - pattern.start + targetTime,
-        value: point.value
-      }))
-
-      // Add new series
-      addSeries({
-        id: `${id}_generated_${Date.now()}`,
-        data: newData,
-        type: 'generated',
-        parentId: id,
-        visible: true
-      })
-    })
-
+      if (point.time >= startTransition && point.time < start) {
+        // Smooth transition before selection
+        const progress = (point.time - startTransition) / transitionRange
+        const easeProgress = d3.easeCubicInOut(progress)
+        
+        const originalValue = point.value
+        const nextPoint = newData.find(p => p && !isNaN(p.time) && !isNaN(p.value) && p.time >= start)
+        if (nextPoint) {
+          newData[i].value = originalValue * (1 - easeProgress) + nextPoint.value * easeProgress
+        }
+      } else if (point.time > end && point.time <= endTransition) {
+        // Smooth transition after selection
+        const progress = (point.time - end) / transitionRange
+        const easeProgress = d3.easeCubicInOut(progress)
+        
+        const originalValue = point.value
+        const prevPoints = newData.filter(p => p && !isNaN(p.time) && !isNaN(p.value) && p.time <= end)
+        const prevPoint = prevPoints.length > 0 ? prevPoints[prevPoints.length - 1] : null
+        
+        if (prevPoint) {
+          newData[i].value = prevPoint.value * (1 - easeProgress) + originalValue * easeProgress
+        }
+      }
+    }
+    
+    // Update series with new data
+    series.value[seriesIndex] = {
+      ...series.value[seriesIndex],
+      data: newData
+    }
+    
     saveState()
   }
 
@@ -706,6 +691,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     series,
     selectedTimeRange,
     selectedSeries,
+    previewSeries,
     addSeries,
     initializeData,
     setSelection,
@@ -719,8 +705,9 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     canUndo,
     canRedo,
     findSimilarPatterns,
-    generateFromPattern,
     replaceWithPattern,
-    importData
+    importData,
+    setPreviewSeries,
+    clearPreviewSeries
   }
 })
