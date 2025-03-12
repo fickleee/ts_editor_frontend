@@ -46,7 +46,7 @@ import NavBar from './components/NavBar.vue';
           <!-- 左侧下部 - 1.7 -->
           <div class="w-[100%] bg-white" 
               :style="{
-                borderRightWidth: `${BORDER_WIDTH}px`,
+                // borderRightWidth: `${BORDER_WIDTH}px`,
                 borderColor: BORDER_COLOR
               }">
             <ProjectionView />
@@ -63,7 +63,7 @@ import NavBar from './components/NavBar.vue';
         <!-- 上部区域 -->
         <div class="flex-1 bg-white" 
             :style="{
-              borderBottomWidth: `${BORDER_WIDTH}px`,
+              // borderBottomWidth: `${BORDER_WIDTH}px`,
               borderColor: BORDER_COLOR
             }">
           <EditView />

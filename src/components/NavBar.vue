@@ -53,7 +53,7 @@
 
     <!-- Action buttons (Import, Export, Undo, Redo) -->
     <div class="flex gap-2">
-      <button
+      <!-- <button
         class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1"
         @click="handleImportData"
         title="Import Data"
@@ -78,7 +78,7 @@
           <path d="M12 16L12 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         Export
-      </button>
+      </button> -->
 
       <button
         class="w-10 h-10 rounded-lg flex items-center justify-center bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
@@ -86,7 +86,7 @@
         @click="timeSeriesStore.undo"
         title="Undo"
       >
-        ↩️
+        <img src="@/assets/undo.svg" alt="Undo" class="w-10 h-10" />
       </button>
 
       <button
@@ -95,7 +95,7 @@
         @click="timeSeriesStore.redo"
         title="Redo"
       >
-        ↪️
+        <img src="@/assets/redo.svg" alt="Redo" class="w-10 h-10" />
       </button>
     </div>
   </nav>
