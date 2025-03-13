@@ -1,12 +1,12 @@
 <template>
   <div ref="container" class="w-full h-full relative">
     <!-- 固定在顶部的概览区域 -->
-    <div class="w-full h-[200px] border-b border-gray-300">
+    <div class="w-full h-[200px] border-b border-gray-300" v-loading="overviewLoading" element-loading-text="loading...">
       <div ref="overviewChart" class="w-full h-full"></div>
     </div>
     
     <!-- 可滚动的用户数据区域 -->
-    <div class="absolute top-[200px] bottom-0 left-0 right-0 overflow-auto">
+    <div class="absolute top-[200px] bottom-0 left-0 right-0 overflow-auto" v-loading="userChartLoading" element-loading-text="loading..."> 
       <div ref="chartContainer" class="w-full" :style="{ height: `${allUserData.length * userStripHeight}px`, minWidth: '100%' }">
         <div ref="lineChart" class="w-full h-full"></div>
       </div>
@@ -15,9 +15,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import * as d3 from 'd3';
-import { reqDataStep, reqDataWeek, reqDataOriginal } from '@/api';
+import { reqDataDay, reqDataWeek, reqDataOriginal, reqDataAllUserWeek } from '@/api';
 import { useDatasetStore } from '../stores/datasetStore';
 import { ElMessage } from 'element-plus';
 
@@ -26,14 +26,16 @@ const overviewChart = ref(null);
 const chartContainer = ref(null);
 const lineChart = ref(null);
 const allUserData = ref([]);
+const allUserDataByWeek = ref([]);
 const originalData = ref([]);
 const datasetStore = useDatasetStore();
 
 // 用户条带高度(像素) - 设置更高以便更好地展示折线图
 const userStripHeight = 150;
 
-// 数据聚合级别 - 'day' 或 'week'
-const aggregationLevel = ref('day');
+// 添加 loading 状态
+const overviewLoading = ref(false);
+const userChartLoading = ref(false);
 
 // 防抖函数
 const debounce = (fn, delay) => {
@@ -66,13 +68,10 @@ const createOverviewChart = (data, container) => {
     .attr('width', containerWidth)
     .attr('height', containerHeight);
 
-  
   // 创建一个组用于显示临时的详细数据线图
   const detailGroup = svg.append('g')
     .attr('class', 'detail-view')
     .style('display', 'none');
-  
-
   
   // 计算每30分钟一个box plot，一天共48个
   const boxPlotCount = 48; // 24小时 * 2 (每小时2个30分钟)
@@ -93,15 +92,45 @@ const createOverviewChart = (data, container) => {
   // 每天的时间段数
   const slotsPerDay = minutesPerDay / minutesPerSlot; // 48
   
+  // 创建一个对象来存储所有用户的聚合数据
+  const userWeekdayData = {};
+  
   // 遍历所有用户的数据
   data.forEach(user => {
     if (!user.data || !Array.isArray(user.data)) return;
     
+    const userId = user.id || 'unknown';
+    userWeekdayData[userId] = {
+      0: Array(slotsPerDay).fill(null), // 周日
+      1: Array(slotsPerDay).fill(null), // 周一
+      2: Array(slotsPerDay).fill(null), // 周二
+      3: Array(slotsPerDay).fill(null), // 周三
+      4: Array(slotsPerDay).fill(null), // 周四
+      5: Array(slotsPerDay).fill(null), // 周五
+      6: Array(slotsPerDay).fill(null)  // 周六
+    };
+    
     // 假设数据是连续的31天，每天1440分钟
     const daysCount = Math.floor(user.data.length / minutesPerDay);
     
+    // 创建一个对象来存储每个工作日的数据
+    const weekdayData = {
+      0: [], // 周日
+      1: [], // 周一
+      2: [], // 周二
+      3: [], // 周三
+      4: [], // 周四
+      5: [], // 周五
+      6: []  // 周六
+    };
+    
     // 对于每一天
     for (let day = 0; day < daysCount; day++) {
+      // 获取这一天的日期
+      const dayStartMinute = day * minutesPerDay;
+      const dayDate = new Date(user.data[dayStartMinute].time);
+      const weekday = dayDate.getDay(); // 0-6，0是周日
+      
       // 对于每个30分钟时间段
       for (let slot = 0; slot < slotsPerDay; slot++) {
         // 计算这个时间段在这一天的起始和结束分钟索引
@@ -117,21 +146,37 @@ const createOverviewChart = (data, container) => {
           }
         }
         
-        // 如果有有效数据，计算这个时间段的平均值并添加到聚合数据中
+        // 如果有有效数据，计算这个时间段的平均值
         if (slotValues.length > 0) {
           const avgValue = slotValues.reduce((sum, val) => sum + val, 0) / slotValues.length;
-          // 添加用户ID和日期信息，使用数据点自带的time信息
+          // 将数据添加到对应工作日的数组中
+          if (!weekdayData[weekday][slot]) {
+            weekdayData[weekday][slot] = [];
+          }
+          weekdayData[weekday][slot].push(avgValue);
+        }
+      }
+    }
+    
+    // 计算每个工作日每个时间段的平均值
+    for (let weekday = 0; weekday < 7; weekday++) {
+      for (let slot = 0; slot < slotsPerDay; slot++) {
+        const values = weekdayData[weekday][slot];
+        if (values && values.length > 0) {
+          const weekdayAvg = values.reduce((sum, val) => sum + val, 0) / values.length;
+          // 保存到用户的周数据中
+          userWeekdayData[userId][weekday][slot] = weekdayAvg;
+          // 添加到聚合数据中
           aggregatedData[slot].push({
-            value: avgValue,
-            userId: user.id || 'unknown',
-            day: day,
-            date: user.data[startMinute].time.split(' ')[0] // 只取日期部分，不要时间
+            value: weekdayAvg,
+            userId: userId,
+            weekday: weekday,
+            weekdayName: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][weekday]
           });
         }
       }
     }
   });
-  
   
   // 检查是否有数据
   const hasData = aggregatedData.some(slot => slot.length > 0);
@@ -161,7 +206,7 @@ const createOverviewChart = (data, container) => {
   // 创建颜色比例尺，为每个用户分配一个颜色
   const colorScale = d3.scaleOrdinal()
     .domain(uniqueUserIds)
-    .range(d3.schemeCategory10); // 使用D3内置的颜色方案
+    .range(d3.schemeCategory10);
   
   // 创建比例尺
   const xScale = d3.scaleLinear()
@@ -260,7 +305,7 @@ const createOverviewChart = (data, container) => {
       .attr('y2', yScale(min))
       .attr('stroke', '#000');
     
-    // 添加异常值并显示用户和日期信息
+    // 修改异常值点的鼠标事件处理
     sorted.forEach(dataPoint => {
       if (dataPoint.value < min || dataPoint.value > max) {
         const outlierGroup = boxGroup.append('g');
@@ -280,8 +325,42 @@ const createOverviewChart = (data, container) => {
               .attr('r', 3)
               .attr('stroke-width', 1);
             
-            // 显示该用户该天的详细数据，传递aggregatedData
-            showUserDayDetail(data, dataPoint.userId, dataPoint.day, detailGroup, containerWidth, containerHeight, aggregatedData);
+            // 清除之前的详细视图
+            detailGroup.selectAll('*').remove();
+            
+            // 获取该用户该工作日的完整数据
+            const userData = userWeekdayData[dataPoint.userId][dataPoint.weekday];
+            
+            // 创建折线图
+            const detailLine = d3.line()
+              .x((d, i) => xScale(i))
+              .y(d => yScale(d))
+              .defined(d => d !== null)
+              .curve(d3.curveMonotoneX);
+            
+            // 绘制折线
+            detailGroup.append('path')
+              .datum(userData)
+              .attr('class', 'detail-line')
+              .attr('d', detailLine)
+              .attr('fill', 'none')
+              .attr('stroke', colorScale(dataPoint.userId))
+              .attr('stroke-width', 2)
+              .attr('stroke-opacity', 0.8);
+            
+            // 添加数据点
+            detailGroup.selectAll('.detail-point')
+              .data(userData)
+              .enter()
+              .filter(d => d !== null)
+              .append('circle')
+              .attr('class', 'detail-point')
+              .attr('cx', (d, i) => xScale(i))
+              .attr('cy', d => yScale(d))
+              .attr('r', 2)
+              .attr('fill', colorScale(dataPoint.userId));
+            
+            // 显示详细视图
             detailGroup.style('display', null);
           })
           .on('mouseout', function() {
@@ -290,13 +369,13 @@ const createOverviewChart = (data, container) => {
               .attr('r', 1.5)
               .attr('stroke-width', 0.3);
             
-            // 隐藏详细数据
+            // 隐藏详细视图
             detailGroup.style('display', 'none');
           });
         
         // 添加鼠标悬停提示
         outlierGroup.append('title')
-          .text(`用户: ${dataPoint.userId}, 日期: ${dataPoint.date}, 值: ${dataPoint.value.toFixed(2)}`);
+          .text(`用户: ${dataPoint.userId}\n星期: ${dataPoint.weekdayName}\n值: ${dataPoint.value.toFixed(2)}`);
       }
     });
     
@@ -311,8 +390,6 @@ const createOverviewChart = (data, container) => {
 最大值: ${max.toFixed(2)}
 数据点数: ${values.length}`);
   });
-  
-
 };
 
 // 显示用户某天的详细数据
@@ -452,7 +529,7 @@ const showUserDayDetail = (data, userId, day, detailGroup, width, height, aggreg
 };
 
 // 创建折线图表
-const createLineChart = (data, container) => {
+const createLineChart = (data, container, allUserDataByWeek) => {
   // 添加数据检查
   if (!data || !data.length) {
     console.warn('No data received');
@@ -501,8 +578,19 @@ const createLineChart = (data, container) => {
     value: sum / userCount
   }));
   
-  // 计算所有用户数据的全局值范围
-  const allValues = data.flatMap(user => user.res.map(point => point.value));
+  // 计算所有数据的全局值范围（包括主数据线和周数据线）
+  let allValues = data.flatMap(user => user.res.map(point => point.value));
+  
+  // 添加周数据的值到全局值范围计算中
+  if (allUserDataByWeek) {
+    const weekValues = allUserDataByWeek.flatMap(user => 
+      user.weekly_data.flatMap(weekData => 
+        weekData.res ? weekData.res.map(point => point.value) : []
+      )
+    );
+    allValues = allValues.concat(weekValues);
+  }
+  
   const minValue = d3.min(allValues) || 0;
   const maxValue = d3.max(allValues) || 1;
 
@@ -514,6 +602,12 @@ const createLineChart = (data, container) => {
   const yScale = d3.scaleLinear()
     .domain([minValue, maxValue])
     .range([userStripHeight - 20, 20]);
+
+  // 创建折线生成器 - 用户数据
+  const line = d3.line()
+    .x((d, i) => xScale(i))
+    .y(d => yScale(d.value))
+    .curve(d3.curveMonotoneX);
 
   // 为每个用户创建一个组
   data.forEach((user, userIndex) => {
@@ -536,7 +630,58 @@ const createLineChart = (data, container) => {
       .attr('fill', 'white')
       .attr('stroke', '#e5e7eb')
       .attr('stroke-width', 1);
-    
+
+    // 绘制用户数据线（在上层）
+    userGroup.append('path')
+      .datum(user.res)
+      .attr('class', 'line')
+      .attr('d', line)
+      .attr('fill', 'none')
+      .attr('stroke', '#2196F3')
+      .attr('stroke-width', 2);
+
+    // 如果聚合级别是day，绘制每周数据
+    if (datasetStore.aggregationLevel === 'day' && allUserDataByWeek) {
+      const userWeeklyData = allUserDataByWeek.find(u => u.id === user.id);
+      if (userWeeklyData && userWeeklyData.weekly_data) {
+        // 使用两种颜色：工作日一种颜色，周末一种颜色
+        const workdayColor = '#ccebc5'; // 绿色 - 工作日
+        const weekendColor = '#fbb4ae'; // 红色 - 周末
+        
+        userWeeklyData.weekly_data.forEach((weekData, dayIndex) => {
+          if (weekData && weekData.res && Array.isArray(weekData.res) && weekData.res.length > 0) {
+            // 创建时间比例尺，确保不同采样频率的数据能够在时间上对齐
+            // 假设每个数据点代表一天中均匀分布的时间点
+            const weekDataLength = weekData.res.length;
+            const weekDataPoints = weekData.res.map((d, i) => ({
+              value: d.value,
+              // 将索引映射到一天的时间范围 [0, timeRange[1]]
+              timePosition: timeRange[1] * (i / (weekDataLength - 1))
+            }));
+            
+            // 使用时间位置而不是索引来绘制线条
+            const weekLine = d3.line()
+              .x(d => xScale(d.timePosition))
+              .y(d => yScale(d.value))
+              .curve(d3.curveMonotoneX);
+            
+            // 判断是工作日还是周末
+            const isWeekend = weekData.weekday === 5 || weekData.weekday === 6; // 周六是5，周日是6
+            const lineColor = isWeekend ? weekendColor : workdayColor;
+            
+            userGroup.append('path')
+              .datum(weekDataPoints)
+              .attr('class', `week-line day-${weekData.weekday}`)
+              .attr('d', weekLine)
+              .attr('fill', 'none')
+              .attr('stroke', lineColor)
+              .attr('stroke-width', 1.5)
+              .attr('stroke-opacity', 1);
+          }
+        });
+      }
+    }
+
     // 添加X轴网格线
     const xTicks = 12; // 每两小时一条线
     for (let i = 0; i <= xTicks; i++) {
@@ -564,12 +709,6 @@ const createLineChart = (data, container) => {
         .attr('stroke-width', 0.5)
         .attr('stroke-dasharray', '3,3');
     }
-    
-    // 创建折线生成器 - 用户数据
-    const line = d3.line()
-      .x((d, i) => xScale(i))
-      .y(d => yScale(d.value))
-      .curve(d3.curveMonotoneX);
 
     // 创建折线生成器 - 平均数据
     const avgLine = d3.line()
@@ -587,15 +726,6 @@ const createLineChart = (data, container) => {
       .attr('stroke-width', 1.5)
       .attr('stroke-dasharray', '5,3') // 虚线样式
       .attr('stroke-opacity', 0.6); // 半透明
-
-    // 绘制用户数据线（在上层）
-    userGroup.append('path')
-      .datum(user.res)
-      .attr('class', 'line')
-      .attr('d', line)
-      .attr('fill', 'none')
-      .attr('stroke', '#2196F3')
-      .attr('stroke-width', 2);
 
     // 添加用户标签
     userGroup.append('text')
@@ -621,35 +751,6 @@ const createLineChart = (data, container) => {
   });
 };
 
-// 获取聚合数据的函数
-const fetchAggregatedData = async (level) => {
-  try {
-    let response;
-    
-    // 根据聚合级别选择不同的API
-    if (level === 'day') {
-      response = await reqDataStep();
-    } else if (level === 'week') {
-      response = await reqDataWeek();
-    }
-    
-    // 更新数据
-    allUserData.value = response;
-    
-    // 更新图表
-    if (lineChart.value) {
-      setTimeout(() => {
-        createLineChart(allUserData.value, lineChart.value);
-      }, 0);
-    }
-  } catch (error) {
-    console.error(`Error fetching ${level} aggregated data:`, error);
-  }
-};
-
-// 防抖处理的数据获取函数
-const debouncedFetchData = debounce(fetchAggregatedData, 300);
-
 // 获取数据
 const fetchData = async () => {
   // 如果没有选择数据集，直接返回
@@ -661,36 +762,48 @@ const fetchData = async () => {
   }
 
   try {
-    // 获取用户数据
-    const stepRes = await reqDataStep();
+    // 设置 loading 状态
+    overviewLoading.value = true;
+    userChartLoading.value = true;
+
+    // 同时发起所有数据请求
+    const [stepRes, weeklyRes, originalRes] = await Promise.all([
+      reqDataDay(datasetStore.getCurrentDataset),
+      reqDataAllUserWeek(datasetStore.getCurrentDataset),
+      reqDataOriginal(datasetStore.getCurrentDataset)
+    ]);
+
+    // 更新数据
     allUserData.value = stepRes;
-    
-    // 获取原始数据用于概览
-    const originalRes = await reqDataOriginal(datasetStore.getCurrentDataset);
+    allUserDataByWeek.value = weeklyRes;
     originalData.value = originalRes;
+    
+    // 等待下一个渲染周期，确保 DOM 更新完成
+    await nextTick();
     
     // 更新图表
     if (lineChart.value) {
-      setTimeout(() => {
-        createLineChart(allUserData.value, lineChart.value);
-      }, 0);
+      createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
     }
     
     // 更新概览图表
     if (overviewChart.value) {
-      setTimeout(() => {
-        createOverviewChart(originalData.value, overviewChart.value);
-      }, 0);
+      createOverviewChart(originalData.value, overviewChart.value);
     }
   } catch (error) {
     console.error('Error fetching data:', error);
+    ElMessage.error('获取数据失败');
+  } finally {
+    // 无论成功失败都关闭 loading
+    overviewLoading.value = false;
+    userChartLoading.value = false;
   }
 };
 
 // 监听容器大小变化
 const resizeObserver = new ResizeObserver(() => {
   if (allUserData.value.length && lineChart.value) {
-    createLineChart(allUserData.value, lineChart.value);
+    createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
   }
   if (originalData.value.length && overviewChart.value) {
     createOverviewChart(originalData.value, overviewChart.value);
@@ -721,39 +834,59 @@ onUnmounted(() => {
 // 监听数据变化
 watch([allUserData, originalData], ([newUserData, newOriginalData]) => {
   if (newUserData.length && lineChart.value) {
-    createLineChart(newUserData, lineChart.value);
+    createLineChart(newUserData, lineChart.value, allUserDataByWeek.value);
   }
   if (newOriginalData.length && overviewChart.value) {
     createOverviewChart(newOriginalData, overviewChart.value);
   }
 }, { deep: true });
 
-// 监听聚合级别变化
+// 修改聚合级别变化的监听器
 watch(() => datasetStore.aggregationLevel, async (newLevel) => {
   // 检查是否选择了数据集
   if (!datasetStore.getCurrentDataset) {
-    console.warn('No dataset selected');
-    ElMessage.warning('Please select a dataset first');
     return;
   }
 
   try {
+    // 只设置用户图表的 loading，因为聚合级别变化不影响概览
+    userChartLoading.value = true;
+
     // 根据聚合级别获取不同的数据
     if (newLevel === 'day') {
-      const stepData = await reqDataStep();
+      // 同时获取日数据和周数据
+      const [stepData, weeklyData] = await Promise.all([
+        reqDataDay(datasetStore.getCurrentDataset),
+        reqDataAllUserWeek(datasetStore.getCurrentDataset)
+      ]);
+      
       allUserData.value = stepData;
+      allUserDataByWeek.value = weeklyData;
+      
+      // 等待下一个渲染周期
+      await nextTick();
+      
+      // 更新图表
+      if (lineChart.value) {
+        createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
+      }
     } else if (newLevel === 'week') {
-      const weekData = await reqDataWeek();
+      const weekData = await reqDataWeek(datasetStore.getCurrentDataset);
       allUserData.value = weekData;
-    }
-    
-    // 更新图表
-    if (lineChart.value) {
-      createLineChart(allUserData.value, lineChart.value);
+      allUserDataByWeek.value = []; // 清空周数据
+      
+      // 等待下一个渲染周期
+      await nextTick();
+      
+      // 更新图表
+      if (lineChart.value) {
+        createLineChart(allUserData.value, lineChart.value);
+      }
     }
   } catch (error) {
-    console.error('Error fetching aggregated data:', error);
-    ElMessage.error('Failed to load aggregated data');
+    ElMessage.error('加载聚合数据失败');
+  } finally {
+    userChartLoading.value = false;
   }
 }, { immediate: true });
 

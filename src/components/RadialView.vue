@@ -5,7 +5,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import * as d3 from 'd3';
-import { reqDataStep } from '@/api';
+import { reqDataDay } from '@/api';
 import { GREEN_GRADIENT_COLORS } from '@/utils/constants';
 
 const chartContainer = ref(null);
@@ -119,7 +119,7 @@ const createConcentricDonuts = (data, container) => {
 // 获取数据
 const fetchData = async () => {
   try {
-    const res = await reqDataStep();
+    const res = await reqDataDay();
     data.value = res;
     if (chartContainer.value) {
       setTimeout(() => {

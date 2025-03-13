@@ -19,7 +19,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import * as d3 from 'd3';
-import { reqDataStep, reqDataDistribution, reqDataOriginal } from '@/api';
+import { reqDataDay, reqDataDistribution, reqDataOriginal } from '@/api';
 
 const container = ref(null);
 const userOverviewChart = ref(null);
@@ -245,7 +245,7 @@ const createMatrixView = (data, container) => {
 const fetchData = async () => {
   try {
     // 获取用户概览数据
-    const overviewRes = await reqDataStep();
+    const overviewRes = await reqDataDay();
     const originalRes = await reqDataOriginal('step');
     console.log(originalRes);
     
