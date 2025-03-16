@@ -16,6 +16,14 @@ const props = defineProps({
   isGeneratePreview: {
     type: Boolean,
     default: false
+  },
+  timeAxisConfig: {
+    type: Object,
+    default: () => ({
+      marginLeft: 60,
+      marginRight: 20,
+      width: null
+    })
   }
 })
 
