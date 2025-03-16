@@ -48,6 +48,40 @@
       </div>
     </div>
 
+    <!-- 变量选择下拉框 (仅在 capture 数据集时显示) -->
+    <div class="relative" v-if="datasetStore.getCurrentDataset === 'capture'">
+      <button 
+        @click="isVariableOpen = !isVariableOpen"
+        class="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors duration-200"
+      >
+        <span class="text-sm font-medium">{{ selectedVariable || '选择变量' }}</span>
+        <!-- 下拉箭头 -->
+        <svg 
+          class="h-4 w-4 transition-transform duration-200"
+          :class="{ 'rotate-180': isVariableOpen }"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+        </svg>
+      </button>
+
+      <!-- 变量下拉菜单 -->
+      <div 
+        v-if="isVariableOpen"
+        class="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg py-1 z-10"
+      >
+        <button 
+          v-for="option in variables" 
+          :key="option"
+          @click="selectVariable(option)"
+          class="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 text-gray-700 hover:text-purple-600"
+        >
+          {{ option }}
+        </button>
+      </div>
+    </div>
+
     <!-- 聚合方式切换 Tab -->
     <div class="flex bg-gray-100 p-1 rounded-lg">
       <button
@@ -103,7 +137,10 @@ import { downloadCSV } from '../utils/csvUtils';
 const datasetStore = useDatasetStore();
 const timeSeriesStore = useTimeSeriesStore();
 const isOpen = ref(false);
-const datasets = ['step', 'electricity'];
+const isVariableOpen = ref(false);
+const datasets = ['step', 'electricity', 'capture'];
+const variables = ['x', 'y', 'z'];
+const selectedVariable = ref('x');
 
 // 聚合方式选项
 const aggregationOptions = [
@@ -124,6 +161,19 @@ const selectAggregation = (value) => {
 const selectDataset = (dataset) => {
   datasetStore.setDataset(dataset);
   isOpen.value = false;
+  
+  // 如果切换到非 capture 数据集，重置变量选择
+  if (dataset !== 'capture') {
+    selectedVariable.value = 'x';
+  }
+};
+
+// 选择变量
+const selectVariable = (variable) => {
+  selectedVariable.value = variable;
+  isVariableOpen.value = false;
+  // 触发事件，通知相关组件变量已更改
+  datasetStore.setSelectedVariable(variable);
 };
 
 // Import Data handler
@@ -167,6 +217,11 @@ const exportAllSeries = () => {
 const handleClickOutside = (event) => {
   if (isOpen.value && !event.target.closest('.relative')) {
     isOpen.value = false;
+  }
+  
+  // 添加变量下拉框的点击外部关闭逻辑
+  if (isVariableOpen.value && !event.target.closest('.relative')) {
+    isVariableOpen.value = false;
   }
 };
 

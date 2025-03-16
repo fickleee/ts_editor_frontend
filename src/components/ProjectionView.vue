@@ -366,7 +366,6 @@ const fetchProjectionData = async () => {
       selectedModel.value,
       selectedAggregation.value
     );
-    console.log(data);
     allPoints.value = data;
     createScatterPlot(data);
   } catch (error) {
@@ -395,6 +394,10 @@ onUnmounted(() => {
 
 // 监听数据集变化
 watch(() => datasetStore.getCurrentDataset, (newDataset) => {
+  // TODO: 暂时不支持capture数据集的投影视图
+  if (newDataset === 'capture') {
+    return;
+  }
   if (newDataset) {
     fetchProjectionData();
   } else {
