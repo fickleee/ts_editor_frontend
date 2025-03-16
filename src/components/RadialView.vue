@@ -7,6 +7,10 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 import * as d3 from 'd3';
 import { reqDataDay } from '@/api';
 import { GREEN_GRADIENT_COLORS } from '@/utils/constants';
+import { useDatasetStore } from '../stores/datasetStore';
+import { reqDataDayMultiple } from '../api';
+
+const datasetStore = useDatasetStore();
 
 const chartContainer = ref(null);
 const data = ref([]);
@@ -119,8 +123,12 @@ const createConcentricDonuts = (data, container) => {
 // 获取数据
 const fetchData = async () => {
   try {
-    const res = await reqDataDay();
-    data.value = res;
+    if (datasetStore.getCurrentDataset === 'capture'){
+      data.value = await reqDataDayMultiple(datasetStore.getCurrentDataset, datasetStore.selectedVariable);
+    }
+    else {
+      data.value = await reqDataDay(datasetStore.getCurrentDataset);
+    }
     if (chartContainer.value) {
       setTimeout(() => {
         createConcentricDonuts(data.value, chartContainer.value);
@@ -141,7 +149,6 @@ const resizeObserver = new ResizeObserver(() => {
 onMounted(() => {
   // 确保容器已经渲染完成
   setTimeout(() => {
-    fetchData();
     if (chartContainer.value) {
       resizeObserver.observe(chartContainer.value);
     }
@@ -152,6 +159,17 @@ onUnmounted(() => {
   if (chartContainer.value) {
     resizeObserver.unobserve(chartContainer.value);
   }
+});
+
+watch(() => datasetStore.getCurrentDataset, (newDataset) => {
+  if (newDataset){
+    if (newDataset === 'capture') {
+      fetchData();
+    }else{
+      fetchData();
+    }
+  }
+
 });
 
 // 监听数据变化

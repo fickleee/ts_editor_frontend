@@ -21,6 +21,7 @@ import { reqDataDay, reqDataWeek, reqDataOriginal, reqDataAllUserWeek, reqDataDa
 import { useDatasetStore } from '../stores/datasetStore';
 import { ElMessage } from 'element-plus';
 import { MATRIX_CHART } from '@/utils/constants';
+import { da } from 'element-plus/es/locales.mjs';
 
 const container = ref(null);
 const overviewChart = ref(null);
@@ -295,7 +296,7 @@ const createOverviewChart = (data, container) => {
     const boxGroup = svg.append('g')
       .attr('transform', `translate(${x}, 0)`);
     
-    // 绘制中位线
+    // // 绘制中位线
     boxGroup.append('line')
       .attr('x1', -boxWidth * 0.3)
       .attr('x2', boxWidth * 0.3)
@@ -750,7 +751,6 @@ const createLineChart = (data, container, allUserDataByWeek) => {
   
   const minValue = d3.min(allValues) || 0;
   const maxValue = d3.max(allValues) || 1;
-  console.log(minValue, maxValue);
   
   // 创建全局比例尺
   const xScale = d3.scaleLinear()
@@ -981,7 +981,7 @@ const resizeObserver = new ResizeObserver(() => {
 
 onMounted(() => {
   setTimeout(() => {
-    fetchData();
+    // fetchData();
     if (lineChart.value) {
       resizeObserver.observe(lineChart.value);
     }
