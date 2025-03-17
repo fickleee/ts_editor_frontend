@@ -5,9 +5,13 @@ export const useDatasetStore = defineStore('dataset', () => {
   const currentDataset = ref('');
   const aggregationLevel = ref('day');
   const selectedVariable = ref('x'); // 添加选中的变量状态
+  const showWeekday = ref(true); // 添加工作日显示状态
+  const showWeekend = ref(true); // 添加周末显示状态
 
   // 计算属性
   const getCurrentDataset = computed(() => currentDataset.value);
+  const getShowWeekday = computed(() => showWeekday.value);
+  const getShowWeekend = computed(() => showWeekend.value);
 
   // 方法
   function setDataset(dataset) {
@@ -23,13 +27,28 @@ export const useDatasetStore = defineStore('dataset', () => {
     selectedVariable.value = variable;
   }
 
+  // 添加设置工作日/周末显示状态的方法
+  function setShowWeekday(show) {
+    showWeekday.value = show;
+  }
+
+  function setShowWeekend(show) {
+    showWeekend.value = show;
+  }
+
   return {
     currentDataset,
     aggregationLevel,
-    selectedVariable, // 导出变量状态
+    selectedVariable,
+    showWeekday,
+    showWeekend,
     getCurrentDataset,
+    getShowWeekday,
+    getShowWeekend,
     setDataset,
     setAggregationLevel,
-    setSelectedVariable, // 导出设置变量的方法
+    setSelectedVariable,
+    setShowWeekday,
+    setShowWeekend,
   };
 }); 
