@@ -1,9 +1,17 @@
 <template>
-  <div ref="chartContainer" class="w-full h-full"></div>
+  <div ref="chartContainer" class="w-full h-full relative">
+    <!-- 加载动画 -->
+    <div v-if="isLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
+      <div class="flex flex-col items-center gap-2">
+        <div class="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+        <span class="text-sm text-gray-600">loading...</span>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import * as d3 from 'd3';
 import { reqDataDay } from '@/api';
 import { GREEN_GRADIENT_COLORS } from '@/utils/constants';
@@ -14,6 +22,7 @@ const datasetStore = useDatasetStore();
 
 const chartContainer = ref(null);
 const data = ref([]);
+const isLoading = ref(false);
 
 // 创建同心环形图
 const createConcentricDonuts = (data, container) => {
@@ -122,20 +131,23 @@ const createConcentricDonuts = (data, container) => {
 
 // 获取数据
 const fetchData = async () => {
+  if (!datasetStore.getCurrentDataset) {
+    data.value = [];
+    return;
+  }
+
   try {
+    isLoading.value = true;
     if (datasetStore.getCurrentDataset === 'capture'){
       data.value = await reqDataDayMultiple(datasetStore.getCurrentDataset, datasetStore.selectedVariable);
     }
     else {
       data.value = await reqDataDay(datasetStore.getCurrentDataset);
     }
-    if (chartContainer.value) {
-      setTimeout(() => {
-        createConcentricDonuts(data.value, chartContainer.value);
-      }, 0);
-    }
   } catch (error) {
     console.error('Error fetching data:', error);
+  } finally {
+    isLoading.value = false;
   }
 };
 
@@ -147,12 +159,9 @@ const resizeObserver = new ResizeObserver(() => {
 });
 
 onMounted(() => {
-  // 确保容器已经渲染完成
-  setTimeout(() => {
-    if (chartContainer.value) {
-      resizeObserver.observe(chartContainer.value);
-    }
-  }, 0);
+  if (chartContainer.value) {
+    resizeObserver.observe(chartContainer.value);
+  }
 });
 
 onUnmounted(() => {
@@ -161,20 +170,19 @@ onUnmounted(() => {
   }
 });
 
-watch(() => datasetStore.getCurrentDataset, (newDataset) => {
-  if (newDataset){
-    if (newDataset === 'capture') {
-      fetchData();
-    }else{
-      fetchData();
-    }
+// 监听数据集变化
+watch(() => datasetStore.getCurrentDataset, async (newDataset) => {
+  if (newDataset) {
+    await fetchData();
+  } else {
+    data.value = [];
   }
-
-});
+}, { immediate: true });
 
 // 监听数据变化
-watch(data, (newData) => {
+watch(data, async (newData) => {
   if (newData.length && chartContainer.value) {
+    await nextTick();
     createConcentricDonuts(newData, chartContainer.value);
   }
 }, { deep: true });

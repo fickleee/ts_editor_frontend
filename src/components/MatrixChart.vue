@@ -1,14 +1,22 @@
 <template>
   <div ref="container" class="w-full h-full relative">
     <!-- 固定在顶部的概览区域 -->
-    <div class="w-full h-[200px] border-b border-gray-300" v-loading="overviewLoading" element-loading-text="loading...">
+    <div class="w-full h-[200px] border-b border-gray-300">
       <div ref="overviewChart" class="w-full h-full"></div>
     </div>
     
     <!-- 可滚动的用户数据区域 -->
-    <div class="absolute top-[200px] bottom-0 left-0 right-0 overflow-auto" v-loading="userChartLoading" element-loading-text="loading..."> 
+    <div class="absolute top-[200px] bottom-0 left-0 right-0 overflow-auto">
       <div ref="chartContainer" class="w-full" :style="{ height: `${allUserData.length * userStripHeight}px`, minWidth: '100%' }">
         <div ref="lineChart" class="w-full h-full"></div>
+      </div>
+    </div>
+
+    <!-- 全局加载动画 -->
+    <div v-if="isLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
+      <div class="flex flex-col items-center gap-2">
+        <div class="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+        <span class="text-sm text-gray-600">loading...</span>
       </div>
     </div>
   </div>
@@ -21,7 +29,6 @@ import { reqDataDay, reqDataWeek, reqDataOriginal, reqDataAllUserWeek, reqDataDa
 import { useDatasetStore } from '../stores/datasetStore';
 import { ElMessage } from 'element-plus';
 import { MATRIX_CHART } from '@/utils/constants';
-import { da } from 'element-plus/es/locales.mjs';
 
 const container = ref(null);
 const overviewChart = ref(null);
@@ -35,9 +42,8 @@ const datasetStore = useDatasetStore();
 // 修改用户条带高度的定义
 const userStripHeight = MATRIX_CHART.USER_STRIP_HEIGHT;
 
-// 添加 loading 状态
-const overviewLoading = ref(false);
-const userChartLoading = ref(false);
+// 修改 loading 状态管理
+const isLoading = ref(false);
 
 // 防抖函数
 const debounce = (fn, delay) => {
@@ -921,9 +927,8 @@ const fetchData = async () => {
   }
 
   try {
-    // 设置 loading 状态
-    overviewLoading.value = true;
-    userChartLoading.value = true;
+    // 设置统一的 loading 状态
+    isLoading.value = true;
 
     if (datasetStore.getCurrentDataset === 'capture') {
       const [dayRes, weeklyRes, originalRes] = await Promise.all([
@@ -963,9 +968,8 @@ const fetchData = async () => {
     console.error('Error fetching data:', error);
     ElMessage.error('获取数据失败');
   } finally {
-    // 无论成功失败都关闭 loading
-    overviewLoading.value = false;
-    userChartLoading.value = false;
+    // 关闭 loading 状态
+    isLoading.value = false;
   }
 };
 

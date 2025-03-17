@@ -15,70 +15,75 @@
     />
     
     <!-- 数据集选择下拉框 -->
-    <div class="relative">
-      <button 
-        @click="isOpen = !isOpen"
-        class="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors duration-200"
-      >
-        <span class="text-sm font-medium">{{ datasetStore.getCurrentDataset || 'Select Dataset' }}</span>
-        <!-- 下拉箭头 -->
-        <svg 
-          class="h-4 w-4 transition-transform duration-200"
-          :class="{ 'rotate-180': isOpen }"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-        </svg>
-      </button>
-
-      <!-- 下拉菜单 -->
-      <div 
-        v-if="isOpen"
-        class="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg py-1 z-10"
-      >
+    <div class="flex items-center gap-2">
+      <span class="text-sm text-gray-600">dataset:</span>
+      <div class="relative">
         <button 
-          v-for="option in datasets" 
-          :key="option"
-          @click="selectDataset(option)"
-          class="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 text-gray-700 hover:text-purple-600"
+          @click="isOpen = !isOpen"
+          class="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors duration-200"
         >
-          {{ option }}
+          <span class="text-sm font-medium">{{ datasetStore.getCurrentDataset || 'Select Dataset' }}</span>
+          <!-- 下拉箭头 -->
+          <svg 
+            class="h-4 w-4 transition-transform duration-200"
+            :class="{ 'rotate-180': isOpen }"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+          </svg>
         </button>
+
+        <!-- 下拉菜单 -->
+        <div 
+          v-if="isOpen"
+          class="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg py-1 z-10"
+        >
+          <button 
+            v-for="option in datasets" 
+            :key="option"
+            @click="selectDataset(option)"
+            class="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 text-gray-700 hover:text-purple-600"
+          >
+            {{ option }}
+          </button>
+        </div>
       </div>
     </div>
-
     <!-- 变量选择下拉框 (仅在 capture 数据集时显示) -->
-    <div class="relative" v-if="datasetStore.getCurrentDataset === 'capture'">
-      <button 
-        @click="isVariableOpen = !isVariableOpen"
-        class="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors duration-200"
-      >
-        <span class="text-sm font-medium">{{ selectedVariable || '选择变量' }}</span>
-        <!-- 下拉箭头 -->
-        <svg 
-          class="h-4 w-4 transition-transform duration-200"
-          :class="{ 'rotate-180': isVariableOpen }"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-        </svg>
-      </button>
-
-      <!-- 变量下拉菜单 -->
-      <div 
-        v-if="isVariableOpen"
-        class="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg py-1 z-10"
-      >
+    <div class="flex items-center gap-2" v-if="datasetStore.getCurrentDataset === 'capture'">
+      <span class="text-sm text-gray-600">variable:</span>
+      <div class="relative">
         <button 
-          v-for="option in variables" 
-          :key="option"
-          @click="selectVariable(option)"
-          class="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 text-gray-700 hover:text-purple-600"
+          @click="isVariableOpen = !isVariableOpen"
+          class="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors duration-200"
         >
-          {{ option }}
+          <span class="text-sm font-medium">{{ selectedVariable || '选择变量' }}</span>
+          <!-- 下拉箭头 -->
+          <svg 
+            class="h-4 w-4 transition-transform duration-200"
+            :class="{ 'rotate-180': isVariableOpen }"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+          </svg>
         </button>
+
+        <!-- 变量下拉菜单 -->
+        <div 
+          v-if="isVariableOpen"
+          class="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg py-1 z-10"
+        >
+          <button 
+            v-for="option in variables" 
+            :key="option"
+            @click="selectVariable(option)"
+            class="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 text-gray-700 hover:text-purple-600"
+          >
+            {{ option }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -103,7 +108,7 @@
     <div class="flex-1"></div>
 
     <!-- Action buttons -->
-    <div class="flex gap-2">
+    <div class="flex gap-4 mr-6">
       <button
         class="w-10 h-10 rounded-lg flex items-center justify-center bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
         :disabled="!timeSeriesStore.canUndo"
@@ -144,18 +149,19 @@ const selectedVariable = ref('x');
 
 // 聚合方式选项
 const aggregationOptions = [
-  { label: 'By Day', value: 'day' },
-  { label: 'By Week', value: 'week' }
+  { label: 'Day', value: 'day' },
+  { label: 'Week', value: 'week' },
+  { label: 'Month', value: 'month' },
+  { label: 'Year', value: 'year' }
 ];
 
 // 当前选中的聚合方式
 const currentAggregation = ref('day');
 
-// 切换聚合方式
+// 切换聚合方式 (仅更新UI状态，不触发实际功能)
 const selectAggregation = (value) => {
   currentAggregation.value = value;
-  // 触发事件，让 MatrixChart 组件知道聚合方式改变了
-  datasetStore.setAggregationLevel(value);
+  // 不触发任何实际的聚合功能
 };
 
 const selectDataset = (dataset) => {

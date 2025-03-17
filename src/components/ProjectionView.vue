@@ -1,42 +1,114 @@
 <template>
   <div ref="container" class="w-full h-full relative">
+    <!-- 加载动画 -->
+    <div v-if="isLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
+      <div class="flex flex-col items-center gap-2">
+        <div class="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+        <span class="text-sm text-gray-600">loading...</span>
+      </div>
+    </div>
+
     <!-- 控制面板 -->
     <div class="absolute top-4 right-4 flex gap-4 z-10">
       <!-- 模型选择 -->
       <div class="relative">
-        <select 
-          v-model="selectedModel"
-          class="appearance-none bg-white border border-gray-300 rounded-md py-2 pl-3 pr-8 text-sm leading-5 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-          @change="handleModelChange"
+        <button 
+          @click="isModelOpen = !isModelOpen"
+          class="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors duration-200"
         >
-          <option value="umap">UMAP</option>
-          <option value="tsne">t-SNE</option>
-          <option value="pca">PCA</option>
-        </select>
-        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-          <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+          <span class="text-sm font-medium">{{ selectedModel }}</span>
+          <!-- 下拉箭头 -->
+          <svg 
+            class="h-4 w-4 transition-transform duration-200"
+            :class="{ 'rotate-180': isModelOpen }"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
           </svg>
+        </button>
+        <!-- 下拉菜单 -->
+        <div 
+          v-if="isModelOpen"
+          class="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg py-1 z-20"
+        >
+          <button
+            v-for="model in ['umap', 'tsne', 'pca']"
+            :key="model"
+            @click="() => {
+              selectedModel = model;
+              isModelOpen = false;
+              handleModelChange();
+            }"
+            class="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 text-gray-700 hover:text-purple-600"
+            :class="{ 'bg-purple-50 text-purple-600': selectedModel === model }"
+          >
+            {{ model.toUpperCase() }}
+          </button>
         </div>
       </div>
 
       <!-- 聚合方式选择 -->
       <div class="relative">
-        <select 
-          v-model="selectedAggregation"
-          class="appearance-none bg-white border border-gray-300 rounded-md py-2 pl-3 pr-8 text-sm leading-5 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-          @change="handleAggregationChange"
+        <button 
+          @click="isAggregationOpen = !isAggregationOpen"
+          class="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors duration-200"
         >
-          <option value="all">All</option>
-          <option value="day">Day</option>
-          <option value="week">Week</option>
-        </select>
-        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-          <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+          <span class="text-sm font-medium">{{ selectedAggregation }}</span>
+          <!-- 下拉箭头 -->
+          <svg 
+            class="h-4 w-4 transition-transform duration-200"
+            :class="{ 'rotate-180': isAggregationOpen }"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
           </svg>
+        </button>
+        <!-- 下拉菜单 -->
+        <div 
+          v-if="isAggregationOpen"
+          class="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg py-1 z-20"
+        >
+          <button
+            v-for="option in ['all', 'day', 'week']"
+            :key="option"
+            @click="() => {
+              selectedAggregation = option;
+              isAggregationOpen = false;
+              handleAggregationChange();
+            }"
+            class="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 text-gray-700 hover:text-purple-600"
+            :class="{ 'bg-purple-50 text-purple-600': selectedAggregation === option }"
+          >
+            {{ option.charAt(0).toUpperCase() + option.slice(1) }}
+          </button>
         </div>
       </div>
+
+      <!-- eps参数调整滑块 -->
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-600">eps:</span>
+        <input 
+          type="range" 
+          v-model="epsValue" 
+          min="0.5" 
+          max="10" 
+          step="0.5"
+          class="w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+          @input="handleEpsChange"
+        />
+        <span class="text-sm text-gray-600 w-6 text-left">{{ epsValue }}</span>
+      </div>
+      
+      <!-- 显示转移线开关 -->
+      <!-- <div class="flex items-center">
+        <label class="inline-flex items-center cursor-pointer">
+          <input type="checkbox" v-model="showTransitions" class="sr-only peer" @change="draw">
+          <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+          <span class="ml-2 text-sm font-medium text-gray-700">show arrows</span>
+        </label>
+      </div> -->
     </div>
 
     <canvas ref="canvas" class="absolute top-0 left-0"></canvas>
@@ -51,7 +123,8 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import * as d3 from 'd3';
 import { useDatasetStore } from '../stores/datasetStore';
-import { reqDataProjection } from '../api';
+import { reqDataCluster } from '../api';
+import { useDebounceFn } from '@vueuse/core';
 
 const container = ref(null);
 const canvas = ref(null);
@@ -62,10 +135,18 @@ const datasetStore = useDatasetStore();
 // 选择状态
 const selectedModel = ref('tsne');
 const selectedAggregation = ref('all');
+const showTransitions = ref(true); // 控制是否显示转移线
+const epsValue = ref(1.0); // 添加eps参数
+const isModelOpen = ref(false);
+const isAggregationOpen = ref(false);
+const isLoading = ref(false);
 
 // 存储所有的点数据
 const allPoints = ref([]);
 const transform = ref(d3.zoomIdentity);
+
+// 用于存储当前绘制函数的引用
+const currentDrawFunction = ref(null);
 
 // 创建散点图
 const createScatterPlot = (data) => {
@@ -89,23 +170,61 @@ const createScatterPlot = (data) => {
   // 提取所有点并按用户和日期组织数据
   const points = [];
   const trajectoryMap = new Map(); // 用于存储轨迹数据
+  const clusterCenters = new Map(); // 存储所有簇的中心点
+  const clusterCounts = new Map(); // 存储每个簇的点数量
+  const transitionCounts = new Map(); // 存储簇之间的转移次数
   
   data.forEach(user => {
+    // 处理全局聚类信息
+    if (user.global_clustering && user.global_clustering.cluster_counts) {
+      Object.entries(user.global_clustering.cluster_counts).forEach(([clusterId, count]) => {
+        clusterCounts.set(clusterId, count);
+      });
+    }
+    
     user.trajectories.forEach(trajectory => {
       const trajectoryKey = `${user.id}-${trajectory.date}`;
       const trajectoryPoints = [];
       
-      trajectory.points.forEach((point, index) => {
-        const pointData = {
-          x: point[0],
-          y: point[1],
-          userId: user.id,
-          date: trajectory.date,
-          timestamp: trajectory.timestamps[index]
-        };
-        points.push(pointData);
-        trajectoryPoints.push(pointData);
-      });
+      // 处理轨迹点
+      if (trajectory.points && trajectory.timestamps && trajectory.clusters) {
+        // 计算簇之间的转移
+        for (let i = 1; i < trajectory.points.length; i++) {
+          const prevCluster = trajectory.clusters[i-1];
+          const currCluster = trajectory.clusters[i];
+          
+          // 如果前后簇不同，记录一次转移
+          if (prevCluster !== currCluster) {
+            const transitionKey = `${prevCluster}-${currCluster}`;
+            const count = transitionCounts.get(transitionKey) || 0;
+            transitionCounts.set(transitionKey, count + 1);
+          }
+        }
+        
+        trajectory.points.forEach((point, index) => {
+          const pointData = {
+            x: point[0],
+            y: point[1],
+            userId: user.id,
+            date: trajectory.date,
+            timestamp: trajectory.timestamps[index],
+            cluster: trajectory.clusters ? trajectory.clusters[index] : null
+          };
+          points.push(pointData);
+          trajectoryPoints.push(pointData);
+        });
+      }
+      
+      // 处理簇中心点
+      if (trajectory.cluster_centers) {
+        Object.entries(trajectory.cluster_centers).forEach(([clusterId, center]) => {
+          clusterCenters.set(clusterId, {
+            x: center[0],
+            y: center[1],
+            clusterId: clusterId
+          });
+        });
+      }
       
       // 按时间戳排序轨迹点
       trajectoryPoints.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -113,7 +232,7 @@ const createScatterPlot = (data) => {
     });
   });
 
-  // 计算x和y的范围
+  // 计算x和y的范围 (使用所有点而不仅仅是簇中心点，以保持一致的视图)
   const xExtent = d3.extent(points, d => d.x);
   const yExtent = d3.extent(points, d => d.y);
 
@@ -126,8 +245,20 @@ const createScatterPlot = (data) => {
     .domain([yExtent[0], yExtent[1]])
     .range([height - margin.bottom, margin.top]);
 
-  // 创建颜色比例尺（基于用户ID）
+  // 创建颜色比例尺（基于簇ID）
   const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+  
+  // 创建大小比例尺（基于簇中的点数量）
+  const maxCount = Math.max(...clusterCounts.values());
+  const sizeScale = d3.scaleSqrt()
+    .domain([1, maxCount])
+    .range([3, 20]);
+    
+  // 创建线宽比例尺（基于转移次数）
+  const maxTransitionCount = Math.max(...transitionCounts.values(), 1);
+  const lineWidthScale = d3.scaleLinear()
+    .domain([1, maxTransitionCount])
+    .range([1, 8]);
 
   // 绘制轨迹线的函数
   const drawTrajectory = (userId, date) => {
@@ -184,41 +315,95 @@ const createScatterPlot = (data) => {
     ctx.translate(t.x, t.y);
     ctx.scale(t.k, t.k);
 
-    // 首先绘制所有轨迹（低透明度）
-    const userDayGroups = new Map();
-    points.forEach(point => {
-      const key = `${point.userId}-${point.date}`;
-      if (!userDayGroups.has(key)) {
-        userDayGroups.set(key, []);
-      }
-      userDayGroups.get(key).push(point);
-    });
-
-    // 绘制所有轨迹
-    userDayGroups.forEach((dayPoints, key) => {
-      // 按时间戳排序
-      dayPoints.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    // 绘制簇中心点
+    clusterCenters.forEach((center, clusterId) => {
+      const count = clusterCounts.get(clusterId) || 1;
+      const radius = sizeScale(count) / t.k;
       
-      // 绘制连线
       ctx.beginPath();
-      ctx.moveTo(xScale(dayPoints[0].x), yScale(dayPoints[0].y));
-      for (let i = 1; i < dayPoints.length; i++) {
-        ctx.lineTo(xScale(dayPoints[i].x), yScale(dayPoints[i].y));
-      }
-      ctx.strokeStyle = colorScale(dayPoints[0].userId);
+      ctx.arc(xScale(center.x), yScale(center.y), radius, 0, 2 * Math.PI);
+      ctx.fillStyle = colorScale(clusterId);
+      ctx.globalAlpha = 0.7;
+      ctx.fill();
+      ctx.strokeStyle = 'white';
       ctx.lineWidth = 1 / t.k;
-      ctx.globalAlpha = 0.1; // 低透明度
       ctx.stroke();
-
-      // 绘制轨迹点
-      dayPoints.forEach(point => {
-        ctx.beginPath();
-        ctx.arc(xScale(point.x), yScale(point.y), 1 / t.k, 0, 2 * Math.PI);
-        ctx.fillStyle = colorScale(point.userId);
-        ctx.globalAlpha = 0.3;
-        ctx.fill();
-      });
+      
+      // 移除簇ID标签的显示，只在悬停时显示
     });
+
+    // 如果启用了转移线显示，绘制转移线
+    if (showTransitions.value) {
+      // 绘制簇之间的转移线
+      transitionCounts.forEach((count, transitionKey) => {
+        const [sourceId, targetId] = transitionKey.split('-');
+        const source = clusterCenters.get(sourceId);
+        const target = clusterCenters.get(targetId);
+        
+        if (source && target) {
+          // 计算线宽
+          const lineWidth = lineWidthScale(count) / t.k;
+          
+          // 绘制从源到目标的箭头线
+          const startX = xScale(source.x);
+          const startY = yScale(source.y);
+          const endX = xScale(target.x);
+          const endY = yScale(target.y);
+          
+          // 计算方向向量
+          const dx = endX - startX;
+          const dy = endY - startY;
+          const length = Math.sqrt(dx * dx + dy * dy);
+          
+          // 如果源和目标是同一个点，不绘制
+          if (length < 0.001) return;
+          
+          // 单位向量
+          const unitX = dx / length;
+          const unitY = dy / length;
+          
+          // 计算源和目标簇的半径
+          const sourceRadius = sizeScale(clusterCounts.get(sourceId) || 1) / t.k;
+          const targetRadius = sizeScale(clusterCounts.get(targetId) || 1) / t.k;
+          
+          // 调整起点和终点，使线条从簇边缘开始和结束
+          const adjustedStartX = startX + unitX * sourceRadius;
+          const adjustedStartY = startY + unitY * sourceRadius;
+          const adjustedEndX = endX - unitX * targetRadius;
+          const adjustedEndY = endY - unitY * targetRadius;
+          
+          // 绘制线条
+          ctx.beginPath();
+          ctx.moveTo(adjustedStartX, adjustedStartY);
+          ctx.lineTo(adjustedEndX, adjustedEndY);
+          
+          // 设置线条样式
+          ctx.strokeStyle = 'rgba(100, 100, 100, 0.6)';
+          ctx.lineWidth = lineWidth;
+          ctx.stroke();
+          
+          // 绘制箭头
+          const arrowSize = Math.min(8, lineWidth * 3) / t.k;
+          const angle = Math.atan2(dy, dx);
+          
+          ctx.beginPath();
+          ctx.moveTo(adjustedEndX, adjustedEndY);
+          ctx.lineTo(
+            adjustedEndX - arrowSize * Math.cos(angle - Math.PI / 6),
+            adjustedEndY - arrowSize * Math.sin(angle - Math.PI / 6)
+          );
+          ctx.lineTo(
+            adjustedEndX - arrowSize * Math.cos(angle + Math.PI / 6),
+            adjustedEndY - arrowSize * Math.sin(angle + Math.PI / 6)
+          );
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(100, 100, 100, 0.8)';
+          ctx.fill();
+          
+          // 移除转移次数的显示，只在悬停时显示
+        }
+      });
+    }
 
     // 重置透明度
     ctx.globalAlpha = 1.0;
@@ -226,12 +411,17 @@ const createScatterPlot = (data) => {
     ctx.restore();
   };
 
+  // 保存当前绘制函数的引用，以便在其他地方调用
+  currentDrawFunction.value = draw;
+
   // 缩放行为
   const zoom = d3.zoom()
     .scaleExtent([0.1, 10])
     .on('zoom', (event) => {
       transform.value = event.transform;
-      draw();
+      if (currentDrawFunction.value) {
+        currentDrawFunction.value();
+      }
     });
 
   // 应用缩放行为到 Canvas
@@ -248,74 +438,128 @@ const createScatterPlot = (data) => {
     const dataX = xScale.invert((x - t.x) / t.k);
     const dataY = yScale.invert((y - t.y) / t.k);
     
-    // 找到最近的点
-    let nearestPoint = null;
+    // 找到最近的簇中心点
+    let nearestCenter = null;
     let minDistance = Infinity;
     
-    points.forEach(point => {
-      const dx = point.x - dataX;
-      const dy = point.y - dataY;
+    clusterCenters.forEach((center, clusterId) => {
+      const dx = center.x - dataX;
+      const dy = center.y - dataY;
       const distance = dx * dx + dy * dy;
       
       if (distance < minDistance) {
         minDistance = distance;
-        nearestPoint = point;
+        nearestCenter = { ...center, clusterId };
       }
     });
 
-    // 如果找到足够近的点，显示tooltip和高亮轨迹
-    if (minDistance < 0.1) {
-      // 重绘基本图形（包括所有低透明度轨迹）
-      draw();
+    // 如果找到足够近的簇中心点，显示tooltip
+    const threshold = 0.1 * (sizeScale(clusterCounts.get(nearestCenter?.clusterId) || 1) / t.k);
+    if (nearestCenter && minDistance < threshold) {
+      // 重绘基本图形
+      if (currentDrawFunction.value) {
+        currentDrawFunction.value();
+      }
       
-      // 找到同一天同一用户的所有点
-      const dayPoints = points.filter(point => 
-        point.userId === nearestPoint.userId && 
-        point.date === nearestPoint.date
-      );
-      
-      // 按时间戳排序
-      dayPoints.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-      
-      // 绘制高亮轨迹
+      // 高亮显示选中的簇
       ctx.save();
       ctx.translate(t.x, t.y);
       ctx.scale(t.k, t.k);
       
-      // 绘制高亮连线
+      const count = clusterCounts.get(nearestCenter.clusterId) || 1;
+      const radius = sizeScale(count) / t.k;
+      
+      // 绘制高亮边框
       ctx.beginPath();
-      ctx.moveTo(xScale(dayPoints[0].x), yScale(dayPoints[0].y));
-      for (let i = 1; i < dayPoints.length; i++) {
-        ctx.lineTo(xScale(dayPoints[i].x), yScale(dayPoints[i].y));
-      }
-      ctx.strokeStyle = colorScale(nearestPoint.userId);
+      ctx.arc(xScale(nearestCenter.x), yScale(nearestCenter.y), radius + 2 / t.k, 0, 2 * Math.PI);
+      ctx.strokeStyle = 'black';
       ctx.lineWidth = 2 / t.k;
-      ctx.globalAlpha = 1;
       ctx.stroke();
       
-      // 绘制高亮点
-      dayPoints.forEach((point, index) => {
-        ctx.beginPath();
-        ctx.arc(xScale(point.x), yScale(point.y), 3 / t.k, 0, 2 * Math.PI);
-        ctx.fillStyle = colorScale(nearestPoint.userId);
-        ctx.fill();
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 1 / t.k;
-        ctx.stroke();
-        
-        // 在起点和终点添加时间标记
-        if (index === 0 || index === dayPoints.length - 1) {
-          ctx.fillStyle = 'black';
-          ctx.font = `${12 / t.k}px Arial`;
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'bottom';
-          const timeText = point.timestamp.split(' ')[1];
-          ctx.fillText(timeText, 
-            xScale(point.x) + 5 / t.k, 
-            yScale(point.y) - 5 / t.k
-          );
-        }
-      });
+      // 显示簇ID
+      ctx.fillStyle = 'white';
+      ctx.font = `${Math.min(12, radius * t.k)}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(nearestCenter.clusterId, xScale(nearestCenter.x), yScale(nearestCenter.y));
+      
+      // 高亮显示与该簇相关的所有转移
+      if (showTransitions.value) {
+        transitionCounts.forEach((count, transitionKey) => {
+          const [sourceId, targetId] = transitionKey.split('-');
+          
+          // 如果当前簇是源或目标，高亮显示该转移
+          if (sourceId === nearestCenter.clusterId || targetId === nearestCenter.clusterId) {
+            const source = clusterCenters.get(sourceId);
+            const target = clusterCenters.get(targetId);
+            
+            if (source && target) {
+              // 计算线宽
+              const lineWidth = (lineWidthScale(count) + 2) / t.k;
+              
+              // 绘制从源到目标的箭头线
+              const startX = xScale(source.x);
+              const startY = yScale(source.y);
+              const endX = xScale(target.x);
+              const endY = yScale(target.y);
+              
+              // 计算方向向量
+              const dx = endX - startX;
+              const dy = endY - startY;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              
+              // 如果源和目标是同一个点，不绘制
+              if (length < 0.001) return;
+              
+              // 单位向量
+              const unitX = dx / length;
+              const unitY = dy / length;
+              
+              // 计算源和目标簇的半径
+              const sourceRadius = sizeScale(clusterCounts.get(sourceId) || 1) / t.k;
+              const targetRadius = sizeScale(clusterCounts.get(targetId) || 1) / t.k;
+              
+              // 调整起点和终点，使线条从簇边缘开始和结束
+              const adjustedStartX = startX + unitX * sourceRadius;
+              const adjustedStartY = startY + unitY * sourceRadius;
+              const adjustedEndX = endX - unitX * targetRadius;
+              const adjustedEndY = endY - unitY * targetRadius;
+              
+              // 绘制线条
+              ctx.beginPath();
+              ctx.moveTo(adjustedStartX, adjustedStartY);
+              ctx.lineTo(adjustedEndX, adjustedEndY);
+              
+              // 设置线条样式
+              ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+              ctx.lineWidth = lineWidth;
+              ctx.stroke();
+              
+              // 在线条中间显示转移次数
+              const midX = (adjustedStartX + adjustedEndX) / 2;
+              const midY = (adjustedStartY + adjustedEndY) / 2;
+              
+              ctx.fillStyle = 'black';
+              ctx.font = `${Math.max(10, lineWidth * 1.5) / t.k}px Arial`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              
+              // 添加白色背景使文字更清晰
+              const textWidth = ctx.measureText(count.toString()).width;
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+              ctx.fillRect(
+                midX - textWidth / 2 - 2 / t.k,
+                midY - 8 / t.k,
+                textWidth + 4 / t.k,
+                16 / t.k
+              );
+              
+              ctx.fillStyle = 'black';
+              ctx.fillText(count.toString(), midX, midY);
+            }
+          }
+        });
+      }
       
       ctx.restore();
       
@@ -323,11 +567,51 @@ const createScatterPlot = (data) => {
       tooltip.value.style.display = 'block';
       tooltip.value.style.left = `${x + 10}px`;
       tooltip.value.style.top = `${y + 10}px`;
-      tooltip.value.innerHTML = `User: ${nearestPoint.userId}<br>Date: ${nearestPoint.date}<br>Time: ${nearestPoint.timestamp.split(' ')[1]}`;
+      
+      // 获取与该簇相关的转移信息
+      const incomingTransitions = [];
+      const outgoingTransitions = [];
+      
+      transitionCounts.forEach((count, transitionKey) => {
+        const [sourceId, targetId] = transitionKey.split('-');
+        
+        if (targetId === nearestCenter.clusterId) {
+          incomingTransitions.push({ from: sourceId, count });
+        }
+        
+        if (sourceId === nearestCenter.clusterId) {
+          outgoingTransitions.push({ to: targetId, count });
+        }
+      });
+      
+      // 构建tooltip内容
+      let tooltipContent = `<strong>簇ID: ${nearestCenter.clusterId}</strong><br>点数量: ${clusterCounts.get(nearestCenter.clusterId) || 'N/A'}<br>坐标: (${nearestCenter.x.toFixed(2)}, ${nearestCenter.y.toFixed(2)})`;
+      
+      if (incomingTransitions.length > 0) {
+        tooltipContent += '<br><br><strong>转入:</strong><br>';
+        incomingTransitions
+          .sort((a, b) => b.count - a.count)
+          .forEach(t => {
+            tooltipContent += `从簇 ${t.from}: ${t.count} 次<br>`;
+          });
+      }
+      
+      if (outgoingTransitions.length > 0) {
+        tooltipContent += '<br><strong>转出:</strong><br>';
+        outgoingTransitions
+          .sort((a, b) => b.count - a.count)
+          .forEach(t => {
+            tooltipContent += `到簇 ${t.to}: ${t.count} 次<br>`;
+          });
+      }
+      
+      tooltip.value.innerHTML = tooltipContent;
     } else {
       tooltip.value.style.display = 'none';
       // 重绘基本散点图
-      draw();
+      if (currentDrawFunction.value) {
+        currentDrawFunction.value();
+      }
     }
   };
 
@@ -352,6 +636,18 @@ const handleAggregationChange = async () => {
   await fetchProjectionData();
 };
 
+// 处理eps参数变化（添加防抖）
+const handleEpsChange = useDebounceFn(async () => {
+  await fetchProjectionData();
+}, 500); // 500ms的防抖延迟
+
+// 暴露给组件的绘制函数
+const draw = () => {
+  if (currentDrawFunction.value) {
+    currentDrawFunction.value();
+  }
+};
+
 // 获取投影数据
 const fetchProjectionData = async () => {
   if (!datasetStore.getCurrentDataset) {
@@ -360,16 +656,20 @@ const fetchProjectionData = async () => {
   }
 
   try {
-    // 将模型和聚合方式作为参数传递给API
-    const data = await reqDataProjection(
+    isLoading.value = true;
+    // 将模型、聚合方式和eps参数作为参数传递给API
+    const data = await reqDataCluster(
       datasetStore.getCurrentDataset,
       selectedModel.value,
-      selectedAggregation.value
+      selectedAggregation.value,
+      epsValue.value
     );
     allPoints.value = data;
     createScatterPlot(data);
   } catch (error) {
     console.error('Error fetching projection data:', error);
+  } finally {
+    isLoading.value = false;
   }
 };
 

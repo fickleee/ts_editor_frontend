@@ -12,7 +12,7 @@ import RadialView from './components/RadialView.vue';
     <NavBar />
 
     <div class="flex flex-1">
-      <aside class="w-[45%] flex flex-col" 
+      <aside class="w-[40%] flex flex-col" 
             :style="{
               borderRightWidth: `${BORDER_WIDTH}px`,
               borderColor: BORDER_COLOR
@@ -28,6 +28,7 @@ import RadialView from './components/RadialView.vue';
           <!-- 左右结构1:1 -->
           <div class="w-[50%] bg-white" 
               :style="{
+                borderRightWidth: `${BORDER_WIDTH}px`,
                 borderColor: BORDER_COLOR
               }">
             <RadialView />
@@ -42,7 +43,7 @@ import RadialView from './components/RadialView.vue';
       </aside>
 
       <!-- 右侧区域 - 66.67% -->
-      <main class="w-[55%] bg-gray-100 flex flex-col">
+      <main class="w-[60%] bg-gray-100 flex flex-col">
         <!-- 上部区域 -->
         <div class="flex-1 bg-white" 
             :style="{
