@@ -17,6 +17,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  showTimeAxis: {
+    type: Boolean,
+    default: true
+  },
   timeAxisConfig: {
     type: Object,
     default: () => ({
@@ -24,6 +28,15 @@ const props = defineProps({
       marginRight: 20,
       width: null
     })
+  },
+  showAxisLabels: {
+    type: Boolean,
+    default: false
+  },
+  gridDensity: {
+    type: String,
+    default: 'normal',
+    validator: value => ['sparse', 'normal', 'dense'].includes(value)
   }
 })
 
@@ -39,7 +52,7 @@ const emit = defineEmits([
 
 const chartRef = ref()
 const svg = ref()
-const margin = { top: 20, right: 20, bottom: 30, left: 50 }
+const margin = { top: 20, right: 20, bottom: 0, left: 50 }
 const isDragging = ref(false)
 const dragStartX = ref(null)
 const dragStartY = ref(null)
@@ -47,7 +60,6 @@ const selections = ref([])
 
 const colors = ['#2563eb', '#dc2626', '#16a34a']
 
-// Helper function to create safe selector from series ID
 const getSeriesSelector = (id) => {
   return `series-${id.replace(/[\s.]/g, '_')}`
 }
@@ -55,14 +67,12 @@ const getSeriesSelector = (id) => {
 const initChart = () => {
   if (!chartRef.value) return
 
-  // Clear previous SVG
   d3.select(chartRef.value).selectAll('*').remove()
 
   const container = chartRef.value
   const containerWidth = container.clientWidth
   const containerHeight = props.height || container.clientHeight || 400
 
-  // Create SVG with viewBox for better scaling
   svg.value = d3.select(chartRef.value)
     .append('svg')
     .attr('width', '100%')
@@ -70,13 +80,15 @@ const initChart = () => {
     .attr('viewBox', `0 0 ${containerWidth} ${containerHeight}`)
     .attr('preserveAspectRatio', 'xMidYMid meet')
 
+  const timeAxisHeight = props.isMainChart ? 30 : 20
+  margin.top = props.showTimeAxis ? timeAxisHeight : 5
+
   const g = svg.value.append('g')
     .attr('transform', `translate(${margin.left},${margin.top})`)
 
   const width = containerWidth - margin.left - margin.right
   const height = containerHeight - margin.top - margin.bottom
 
-  // Create scales
   const xScale = d3.scaleLinear()
     .domain([0, 24])
     .range([0, width])
@@ -85,82 +97,145 @@ const initChart = () => {
     .domain([0, 10])
     .range([height, 0])
 
-  // Add grid
-  if (props.showGrid && props.isMainChart) {
-    // Vertical grid lines (every hour)
-    g.selectAll('line.vertical-grid')
+  // Add background and grid for main chart
+  if (props.isMainChart) {
+    // Add subtle background
+    g.append('rect')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('fill', '#fafafa')
+
+    // Add alternating background stripes
+    g.selectAll('rect.time-stripe')
+      .data(d3.range(0, 24, 2))
+      .enter()
+      .append('rect')
+      .attr('class', 'time-stripe')
+      .attr('x', d => xScale(d))
+      .attr('y', 0)
+      .attr('width', xScale(2))
+      .attr('height', height)
+      .attr('fill', (d, i) => i % 2 === 0 ? '#ffffff' : '#fafafa')
+
+    // Major vertical grid lines (every 2 hours)
+    g.selectAll('line.vertical-grid-major')
       .data(d3.range(0, 25, 2))
       .enter()
       .append('line')
-      .attr('class', 'vertical-grid')
+      .attr('class', 'vertical-grid-major')
       .attr('x1', d => xScale(d))
       .attr('x2', d => xScale(d))
       .attr('y1', 0)
       .attr('y2', height)
       .attr('stroke', '#e5e7eb')
       .attr('stroke-width', 1)
-      .attr('stroke-dasharray', '4,4')
 
-    // Horizontal grid lines
-    g.selectAll('line.horizontal-grid')
-      .data(yScale.ticks(5))
+    // Minor vertical grid lines (every 15 minutes)
+    g.selectAll('line.vertical-grid-minor')
+      .data(d3.range(0, 24, 0.25))
       .enter()
       .append('line')
-      .attr('class', 'horizontal-grid')
+      .attr('class', 'vertical-grid-minor')
+      .attr('x1', d => xScale(d))
+      .attr('x2', d => xScale(d))
+      .attr('y1', 0)
+      .attr('y2', height)
+      .attr('stroke', '#f3f4f6')
+      .attr('stroke-width', 0.5)
+
+    // Major horizontal grid lines (every 1.0)
+    g.selectAll('line.horizontal-grid-major')
+      .data(d3.range(0, 11, 1))
+      .enter()
+      .append('line')
+      .attr('class', 'horizontal-grid-major')
       .attr('x1', 0)
       .attr('x2', width)
       .attr('y1', d => yScale(d))
       .attr('y2', d => yScale(d))
       .attr('stroke', '#e5e7eb')
       .attr('stroke-width', 1)
-      .attr('stroke-dasharray', '4,4')
-  }
 
-  // Add time divider lines only for main chart
-  if (props.isMainChart) {
-    const timeMarkers = [0, 6, 12, 18, 24]
-    g.selectAll('line.time-divider')
-      .data(timeMarkers)
+    // Minor horizontal grid lines (every 0.5)
+    g.selectAll('line.horizontal-grid-minor')
+      .data(d3.range(0.5, 10.5, 1))
       .enter()
       .append('line')
-      .attr('class', 'time-divider')
-      .attr('x1', d => xScale(d))
-      .attr('x2', d => xScale(d))
-      .attr('y1', -margin.top)
-      .attr('y2', height)
-      .attr('stroke', '#e5e7eb')
-      .attr('stroke-width', 2)
+      .attr('class', 'horizontal-grid-minor')
+      .attr('x1', 0)
+      .attr('x2', width)
+      .attr('y1', d => yScale(d))
+      .attr('y2', d => yScale(d))
+      .attr('stroke', '#f3f4f6')
+      .attr('stroke-width', 0.5)
   }
 
-  // Configure axes
-  const xAxis = d3.axisBottom(xScale)
-    .ticks(props.isGeneratePreview ? 4 : (props.isMainChart ? 12 : 6))
-    .tickFormat(d => formatTime(+d))
+  // Create time axis container
+  if (props.showTimeAxis) {
+    const timeAxisContainer = svg.value.append('g')
+      .attr('class', 'time-axis-container')
+      .attr('transform', `translate(${margin.left},0)`)
 
-  const yAxis = d3.axisLeft(yScale)
-    .ticks(props.isMainChart ? 5 : 3)
-    .tickFormat(d => d.toFixed(1))
+    // Add striped background for time intervals
+    for (let hour = 0; hour < 24; hour += 2) {
+      timeAxisContainer.append('rect')
+        .attr('x', xScale(hour))
+        .attr('y', 0)
+        .attr('width', xScale(2))
+        .attr('height', timeAxisHeight)
+        .attr('fill', hour % 2 === 0 ? '#ffffff' : '#fafafa')
+        .attr('stroke', 'none')
+    }
 
-  // Add x-axis
-  g.append('g')
-    .attr('class', 'x-axis')
-    .attr('transform', `translate(0,${height})`)
-    .call(xAxis)
-    .selectAll('text')
-    .style('font-size', props.isMainChart ? '10px' : '8px')
+    // Add hour ticks and labels every 2 hours
+    for (let hour = 0; hour <= 24; hour += 2) {
+      timeAxisContainer.append('line')
+        .attr('x1', xScale(hour))
+        .attr('x2', xScale(hour))
+        .attr('y1', timeAxisHeight - 12)
+        .attr('y2', timeAxisHeight)
+        .attr('stroke', '#6b7280')
+        .attr('stroke-width', 1.5)
 
-  // Add y-axis
-  g.append('g')
-    .attr('class', 'y-axis')
-    .call(yAxis)
-    .selectAll('text')
-    .style('font-size', props.isMainChart ? '10px' : '8px')
+      timeAxisContainer.append('text')
+        .attr('x', xScale(hour))
+        .attr('y', timeAxisHeight - 14)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', props.isMainChart ? '10px' : '8px')
+        .attr('fill', '#4b5563')
+        .text(formatTime(hour))
+    }
+
+    // Add medium ticks every 30 minutes
+    for (let hour = 0; hour < 24; hour++) {
+      timeAxisContainer.append('line')
+        .attr('x1', xScale(hour + 0.5))
+        .attr('x2', xScale(hour + 0.5))
+        .attr('y1', timeAxisHeight - 8)
+        .attr('y2', timeAxisHeight)
+        .attr('stroke', '#9ca3af')
+        .attr('stroke-width', 1)
+    }
+
+    // Add small ticks every 15 minutes
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute of [0.25, 0.75]) {
+        timeAxisContainer.append('line')
+          .attr('x1', xScale(hour + minute))
+          .attr('x2', xScale(hour + minute))
+          .attr('y1', timeAxisHeight - 5)
+          .attr('y2', timeAxisHeight)
+          .attr('stroke', '#d1d5db')
+          .attr('stroke-width', 0.75)
+      }
+    }
+  }
 
   // Create line generator
   const line = d3.line()
     .x(d => xScale(d.time))
     .y(d => yScale(d.value))
-    .curve(d3.curveMonotoneX)
+    .curve(d3.curveBasis)
 
   // Draw lines
   props.series.forEach((s, i) => {
@@ -229,7 +304,7 @@ const initChart = () => {
       .attr('stroke-width', 1)
   }
 
-  // Create a group for hover elements that will always be on top
+  // Create hover group
   const hoverGroup = svg.value.append('g')
     .attr('class', 'hover-group')
     .attr('transform', `translate(${margin.left},${margin.top})`)
@@ -291,10 +366,12 @@ const initChart = () => {
         .text(formatTime(time))
         .style('display', null)
 
-      hoverValue
-        .attr('y', y)
-        .text(value.toFixed(2))
-        .style('display', null)
+      if (props.isMainChart) {
+        hoverValue
+          .attr('y', y)
+          .text(value.toFixed(2))
+          .style('display', null)
+      }
 
       if (props.isMainChart) {
         emit('hover', time)
@@ -360,6 +437,19 @@ const initChart = () => {
       .attr('x1', x)
       .attr('x2', x)
       .style('display', null)
+  }
+
+  // Add y-axis for main chart
+  if (props.isMainChart) {
+    const yAxis = d3.axisLeft(yScale)
+      .ticks(5)
+      .tickFormat(d => d === 0 ? '' : d.toFixed(1))
+
+    g.append('g')
+      .attr('class', 'y-axis')
+      .call(yAxis)
+      .selectAll('text')
+      .style('font-size', '10px')
   }
 }
 
@@ -466,18 +556,20 @@ onMounted(() => {
   pointer-events: none;
 }
 
-.x-axis text,
+.time-axis-container text {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+}
+
 .y-axis text {
   font-family: 'Inter', sans-serif;
 }
 
-.x-axis line,
 .y-axis line {
   stroke: #E5E7EB;
   stroke-width: 1;
 }
 
-.x-axis path,
 .y-axis path {
   stroke: none;
 }

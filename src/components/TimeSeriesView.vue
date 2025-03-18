@@ -1,16 +1,20 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import TimeSeriesChart from './TimeSeriesChart.vue'
 import { downloadCSV } from '../utils/csvUtils'
 import { api } from '../services/api'
+import { useTimeSeriesStore } from '../stores/timeSeriesStore'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps({
   series: Object,
   isSelected: Boolean,
-  hoverTime: Number
+  hoverTime: Number,
+  timeAxisConfig: Object
 })
 
 const emit = defineEmits(['click', 'hover'])
+const store = useTimeSeriesStore()
 
 const showDecomposition = ref(false)
 const decompositionNumber = ref(2)
@@ -19,8 +23,65 @@ const level = ref(3)
 const isDecomposing = ref(false)
 const decomposedSeries = ref([])
 
+// 监听子曲线可见性，控制父曲线可见性
+watch(() => decomposedSeries.value, (newSeries) => {
+  if (newSeries.length > 0) {
+    const anyChildVisible = newSeries.some(s => s.visible)
+    if (anyChildVisible && props.series.visible) {
+      props.series.visible = false
+    }
+  }
+}, { deep: true })
+
+// 切换当前系列的可见性
 const toggleVisibility = () => {
   props.series.visible = !props.series.visible
+  
+  // 如果当前是父系列且有子系列，切换父系列可见性时影响子系列
+  if (props.series.visible && decomposedSeries.value.length > 0) {
+    decomposedSeries.value.forEach(s => {
+      s.visible = false
+      
+      // 从store中移除子曲线的可见性
+      const seriesInStore = store.series.find(storeSeries => storeSeries.id === s.id)
+      if (seriesInStore) {
+        seriesInStore.visible = false
+      }
+    })
+  }
+}
+
+// 切换子系列的可见性
+const toggleChildVisibility = (childSeries) => {
+  childSeries.visible = !childSeries.visible
+  
+  // 更新store中的系列或添加到store
+  const seriesInStore = store.series.find(s => s.id === childSeries.id)
+  if (seriesInStore) {
+    seriesInStore.visible = childSeries.visible
+  } else if (childSeries.visible) {
+    // 如果在store中不存在且现在应该可见，则添加到store
+    store.addSeries({...childSeries})
+  }
+  
+  // 如果任何子系列可见，父系列应该不可见
+  if (childSeries.visible && props.series.visible) {
+    props.series.visible = false
+  }
+  
+  // 如果所有子系列都不可见，父系列可以可见
+  const anyChildVisible = decomposedSeries.value.some(s => s.visible)
+  if (!anyChildVisible && !props.series.visible) {
+    props.series.visible = true
+    
+    // 从store中移除所有子曲线
+    decomposedSeries.value.forEach(s => {
+      const index = store.series.findIndex(storeSeries => storeSeries.id === s.id)
+      if (index !== -1) {
+        store.series.splice(index, 1)
+      }
+    })
+  }
 }
 
 const getTypeClass = (type) => {
@@ -44,9 +105,34 @@ const exportSeries = (event) => {
   downloadCSV(props.series.data, `${props.series.id}_export.csv`)
 }
 
+const deleteSeries = (event) => {
+  event.stopPropagation()
+  
+  // 如果要删除的是父曲线，也要同时删除子曲线
+  if (decomposedSeries.value.length > 0) {
+    decomposedSeries.value.forEach(s => {
+      const index = store.series.findIndex(storeSeries => storeSeries.id === s.id)
+      if (index !== -1) {
+        store.series.splice(index, 1)
+      }
+    })
+  }
+  
+  // 从store中删除当前曲线
+  store.deleteSeries(props.series.id)
+  ElMessage.success(`Series ${props.series.id} has been deleted`)
+}
+
 const toggleDecomposition = () => {
   showDecomposition.value = !showDecomposition.value
   if (!showDecomposition.value) {
+    // 取消分解时，需要从store中移除所有子曲线
+    decomposedSeries.value.forEach(s => {
+      const index = store.series.findIndex(storeSeries => storeSeries.id === s.id)
+      if (index !== -1) {
+        store.series.splice(index, 1)
+      }
+    })
     decomposedSeries.value = []
   }
 }
@@ -99,7 +185,7 @@ const applyDecomposition = async () => {
         id: `${props.series.id}_LF`,
         data: lfData,
         type: 'LF',
-        visible: true,
+        visible: false,
         parentId: props.series.id
       })
       
@@ -107,7 +193,7 @@ const applyDecomposition = async () => {
         id: `${props.series.id}_HF`,
         data: hfData,
         type: 'HF',
-        visible: true,
+        visible: false,
         parentId: props.series.id
       })
     } else {
@@ -139,7 +225,7 @@ const applyDecomposition = async () => {
         id: `${props.series.id}_LF`,
         data: lfData,
         type: 'LF',
-        visible: true,
+        visible: false,
         parentId: props.series.id
       })
       
@@ -147,7 +233,7 @@ const applyDecomposition = async () => {
         id: `${props.series.id}_MF`,
         data: mfData,
         type: 'MF',
-        visible: true,
+        visible: false,
         parentId: props.series.id
       })
       
@@ -155,16 +241,16 @@ const applyDecomposition = async () => {
         id: `${props.series.id}_HF`,
         data: hfData,
         type: 'HF',
-        visible: true,
+        visible: false,
         parentId: props.series.id
       })
     }
     
     decomposedSeries.value = newSeries
     showDecomposition.value = false
-    
   } catch (error) {
     console.error('Error decomposing series:', error)
+    ElMessage.error('Failed to decompose time series')
   } finally {
     isDecomposing.value = false
   }
@@ -180,17 +266,51 @@ const applyDecomposition = async () => {
     @mouseleave="handleMouseLeave"
   >
     <div class="flex items-center gap-2 mb-2">
-      <span :class="getTypeClass(series.type)">{{ series.type }}</span>
-      <span class="font-medium text-gray-900">{{ series.id }}</span>
-      <span v-if="series.parentId" class="text-sm text-gray-500">
-        from {{ series.parentId }}
+      <!-- 类型标签移到左上角 -->
+      <span v-if="series.type !== 'original'" :class="getTypeClass(series.type)" class="font-bold mr-2">
+        {{ series.type }}
       </span>
       
-      <div class="flex items-center gap-2 ml-2">
+      <span class="text-sm text-gray-700 font-medium flex-1">{{ series.id }}</span>
+      
+      <button 
+        @click.stop="deleteSeries"
+        class="p-2 rounded hover:bg-gray-100"
+        title="Delete series"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 7L20 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10 11V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14 11V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M5 7L6 19C6 20.1046 6.89543 21 8 21H16C17.1046 21 18 20.1046 18 19L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9 7V4C9 3.44772 9.44772 3 10 3H14C14.5523 3 15 3.44772 15 4V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      
+      <button 
+        @click.stop="exportSeries"
+        class="text-sm px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 flex items-center gap-1"
+        title="Export as CSV"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 16L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9 13L12 16L15 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 16.7428C21.2215 15.734 22 14.2079 22 12.5C22 9.46243 19.5376 7 16.5 7C16.2815 7 16.0771 6.886 15.9661 6.69774C14.6621 4.48484 12.2544 3 9.5 3C5.35786 3 2 6.35786 2 10.5C2 12.5661 2.83545 14.4371 4.18695 15.7935" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 16L12 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Export
+      </button>
+    </div>
+    
+    <!-- 显示框中的控制按钮区域 -->
+    <div class="flex relative h-[120px]">
+      <!-- 左侧控件空间 -->
+      <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-2">
+        <!-- 可视标记按钮 -->
         <button 
           @click.stop="toggleVisibility" 
           class="p-2 rounded hover:bg-gray-100"
-          title="Toggle visibility"
+          title="Toggle visibility in main view"
         >
           <span v-if="series.visible" class="text-gray-800">
             <svg width="19" height="15" viewBox="0 0 19 15" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -204,28 +324,11 @@ const applyDecomposition = async () => {
             </svg>
           </span>
         </button>
-      </div>
-      
-      <button 
-        @click.stop="exportSeries"
-        class="ml-auto text-sm px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 flex items-center gap-1"
-        title="Export as CSV"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 16L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M9 13L12 16L15 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M20 16.7428C21.2215 15.734 22 14.2079 22 12.5C22 9.46243 19.5376 7 16.5 7C16.2815 7 16.0771 6.886 15.9661 6.69774C14.6621 4.48484 12.2544 3 9.5 3C5.35786 3 2 6.35786 2 10.5C2 12.5661 2.83545 14.4371 4.18695 15.7935" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M12 16L12 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Export
-      </button>
-    </div>
-    
-    <div class="flex relative h-[120px]">
-      <div class="w-[60px] flex items-center justify-center">
+        
+        <!-- 分解按钮 - 只在原始曲线上显示 -->
         <button 
           v-if="series.type === 'original'"
-          @click.stop="toggleDecomposition"
+          @click.stop="toggleDecomposition" 
           class="p-2 rounded hover:bg-gray-100"
           title="Decompose series"
         >
@@ -248,21 +351,27 @@ const applyDecomposition = async () => {
           </svg>
         </button>
       </div>
-
-      <div class="w-[8px]"></div>
-
-      <div class="flex-1">
+      
+      <!-- 图表容器，确保与下方时间轴对齐 - 向右拉伸 -->
+      <div class="flex-1 relative">
+        <!-- 始终显示曲线，不受可见性影响 -->
         <TimeSeriesChart
-          :series="[series]"
+          :series="[{...series, visible: true}]"
           :height="120"
           :showGrid="false"
           :isMainChart="false"
+          :showTimeAxis="false"
           :hoverTime="hoverTime"
+          :timeAxisConfig="timeAxisConfig"
         />
       </div>
+      
+      <!-- 右侧边距减小 -->
+      <div class="w-[10px] flex-none" v-if="timeAxisConfig.marginRight"></div>
     </div>
 
-    <div v-if="showDecomposition" class="mt-4 ml-[68px] p-4 bg-gray-50 rounded-lg">
+    <!-- 分解设置面板 -->
+    <div v-if="showDecomposition" class="mt-4 p-4 bg-gray-50 rounded-lg">
       <div class="grid grid-cols-3 gap-4 mb-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">
@@ -321,26 +430,57 @@ const applyDecomposition = async () => {
       </div>
     </div>
 
+    <!-- 分解的子曲线区域 -->
     <div v-if="decomposedSeries.length > 0" class="mt-4">
       <div class="relative">
         <div v-for="(ds, index) in decomposedSeries" :key="ds.id" class="relative mb-4">
-          <div class="w-[60px] absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center">
-            <div class="flex items-center">
-              <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span :class="getTypeClass(ds.type)" class="font-bold">{{ ds.type }}</span>
-            </div>
+          <!-- 为子曲线添加标题栏，将类型标签移到上方左侧 -->
+          <div class="flex items-center gap-2 mb-2">
+            <!-- 类型标签在左上角 -->
+            <span :class="getTypeClass(ds.type)" class="font-bold ml-[60px]">{{ ds.type }}</span>
+            <span class="text-sm text-gray-500">{{ ds.id }}</span>
           </div>
           
-          <div class="ml-[68px] h-[120px]">
-            <TimeSeriesChart
-              :series="[ds]"
-              :height="120"
-              :showGrid="false"
-              :isMainChart="false"
-              :hoverTime="hoverTime"
-            />
+          <!-- 子曲线图表也与时间轴对齐 -->
+          <div class="flex relative h-[120px]">
+            <!-- 左侧控件空间 - 调整为水平排列 -->
+            <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-2">
+              <!-- 子曲线的可视标记按钮 -->
+              <button 
+                @click.stop="toggleChildVisibility(ds)" 
+                class="p-2 rounded hover:bg-gray-100"
+                title="Toggle visibility in main view"
+              >
+                <span v-if="ds.visible" class="text-gray-800">
+                  <svg width="19" height="15" viewBox="0 0 19 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M9.37047 5.33344C8.38867 5.33344 7.59272 6.12935 7.59272 7.11122C7.59272 8.09309 8.38867 8.889 9.37047 8.889C10.3524 8.889 11.1482 8.0931 11.1482 7.11122C11.1482 6.12934 10.3524 5.33344 9.37047 5.33344ZM5.81494 7.11122C5.81494 5.14749 7.40685 3.55566 9.37047 3.55566C11.3342 3.55566 12.926 5.1475 12.926 7.11122C12.926 9.07494 11.3342 10.6668 9.37047 10.6668C7.40685 10.6668 5.81494 9.07495 5.81494 7.11122Z" fill="currentColor"/>
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M0.0408457 6.84475C1.28655 2.8786 4.99136 0 9.37086 0C13.7503 0 17.4551 2.87863 18.7009 6.84475C18.7553 7.01815 18.7553 7.20407 18.7009 7.37747C17.4551 11.3436 13.7503 14.2222 9.37086 14.2222C4.99136 14.2222 1.28654 11.3436 0.040845 7.37747C-0.0136153 7.20407 -0.013615 7.01815 0.0408457 6.84475ZM1.8258 7.11111C2.92422 10.2192 5.88876 12.4444 9.37086 12.4444C12.8529 12.4444 15.8175 10.2192 16.9159 7.11111C15.8175 4.00306 12.8529 1.77778 9.37086 1.77778C5.88876 1.77778 2.92423 4.00304 1.8258 7.11111Z" fill="currentColor"/>
+                  </svg>
+                </span>
+                <span v-else class="text-gray-400">
+                  <svg width="19" height="18" viewBox="0 0 19 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1.48177 1L17.4818 17M7.56557 7.14546C7.101 7.62542 6.8151 8.27929 6.8151 9C6.8151 10.4728 8.00904 11.6667 9.48175 11.6667C10.2129 11.6667 10.8753 11.3724 11.357 10.896M4.59288 4.24191C2.90461 5.35586 1.61868 7.03017 1 9C2.13267 12.6063 5.50183 15.2222 9.48193 15.2222C11.2498 15.2222 12.8972 14.7061 14.2816 13.8164M8.59286 2.82168C8.88531 2.79265 9.18193 2.77778 9.48193 2.77778C13.4621 2.77778 16.8313 5.3937 17.9639 9C17.7144 9.79467 17.3562 10.5412 16.9068 11.2222" stroke="currentColor" stroke-width="1.77778" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </button>
+            </div>
+            
+            <!-- 图表区域 - 向右拉伸 -->
+            <div class="flex-1 relative">
+              <!-- 始终显示子曲线，不受可见性影响 -->
+              <TimeSeriesChart
+                :series="[{...ds, visible: true}]"
+                :height="120"
+                :showGrid="false"
+                :isMainChart="false"
+                :showTimeAxis="false"
+                :hoverTime="hoverTime"
+                :timeAxisConfig="timeAxisConfig"
+              />
+            </div>
+            
+            <!-- 右侧边距减小 -->
+            <div class="w-[10px] flex-none" v-if="timeAxisConfig.marginRight"></div>
           </div>
         </div>
       </div>

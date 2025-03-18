@@ -8,10 +8,10 @@ import RadialView from './components/RadialView.vue';
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col">
+  <div class="h-screen flex flex-col overflow-hidden">
     <NavBar />
 
-    <div class="flex flex-1">
+    <div class="flex flex-1 overflow-hidden">
       <aside class="w-[40%] flex flex-col" 
             :style="{
               borderRightWidth: `${BORDER_WIDTH}px`,
@@ -45,7 +45,7 @@ import RadialView from './components/RadialView.vue';
       <!-- 右侧区域 - 66.67% -->
       <main class="w-[60%] bg-gray-100 flex flex-col">
         <!-- 上部区域 -->
-        <div class="flex-1 bg-white" 
+        <div class="h-full bg-white" 
             :style="{
               // borderBottomWidth: `${BORDER_WIDTH}px`,
               borderColor: BORDER_COLOR

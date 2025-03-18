@@ -28,7 +28,14 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   }
 
   const addSeries = (newSeries) => {
-    series.value.push(newSeries)
+    // 检查系列是否已经存在
+    const existingSeries = series.value.find(s => s.id === newSeries.id);
+    if (!existingSeries) {
+      series.value.push(newSeries);
+    } else {
+      // 更新已存在的系列
+      Object.assign(existingSeries, newSeries);
+    }
     saveState()
   }
 
@@ -281,31 +288,105 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       const seriesIndex = series.value.findIndex(s => s.id === id)
       if (seriesIndex === -1) return
 
+      const originalData = series.value[seriesIndex].data
       const newData = []
       let currentTime = 0
 
-      selections.forEach(selection => {
-        const segmentData = series.value[seriesIndex].data.filter(
-          point => point && point.time >= selection.start && point.time <= selection.end
+      // Helper function to get interpolated value at a specific time
+      const getInterpolatedValue = (time) => {
+        const points = originalData.filter(p => p && !isNaN(p.time) && !isNaN(p.value))
+        if (points.length < 2) return null
+
+        const i = d3.bisector(d => d.time).left(points, time)
+        if (i === 0) return points[0].value
+        if (i === points.length) return points[points.length - 1].value
+
+        const a = points[i - 1]
+        const b = points[i]
+        const t = (time - a.time) / (b.time - a.time)
+        return a.value + t * (b.value - a.value)
+      }
+
+      // Add points at the start (0:00) if needed
+      if (selections[0].start > 0) {
+        const startValue = getInterpolatedValue(0)
+        if (startValue !== null) {
+          newData.push({ time: 0, value: startValue })
+        }
+      }
+
+      // Process each selected segment
+      selections.forEach((selection, index) => {
+        const segmentData = originalData.filter(
+          point => point && !isNaN(point.time) && !isNaN(point.value) &&
+                  point.time >= selection.start && point.time <= selection.end
         )
 
-        segmentData.forEach(point => {
-          if (point && !isNaN(point.time) && !isNaN(point.value)) {
-            const relativeTime = point.time - selection.start
-            const scaledTime = currentTime + (relativeTime * scaleFactor)
-            newData.push({
-              time: scaledTime,
-              value: point.value
-            })
+        // Add transition points between segments if there's a gap
+        if (index > 0) {
+          const prevSegmentEnd = currentTime
+          const thisSegmentStart = currentTime
+          if (Math.abs(prevSegmentEnd - thisSegmentStart) > 0.001) {
+            const transitionPoints = 5
+            for (let i = 1; i < transitionPoints; i++) {
+              const t = i / transitionPoints
+              const time = prevSegmentEnd + t * (thisSegmentStart - prevSegmentEnd)
+              const prevValue = newData[newData.length - 1].value
+              const nextValue = segmentData[0].value
+              const value = prevValue + t * (nextValue - prevValue)
+              newData.push({ time, value })
+            }
           }
+        }
+
+        // Add segment data points
+        segmentData.forEach(point => {
+          const relativeTime = point.time - selection.start
+          const scaledTime = currentTime + (relativeTime * scaleFactor)
+          newData.push({
+            time: scaledTime,
+            value: point.value
+          })
         })
 
         currentTime += (selection.end - selection.start) * scaleFactor
       })
 
+      // Add points at the end (24:00) if needed
+      if (currentTime < 24) {
+        const endValue = getInterpolatedValue(24)
+        if (endValue !== null) {
+          // Add transition points to smooth the connection
+          const lastPoint = newData[newData.length - 1]
+          const transitionPoints = 5
+          for (let i = 1; i <= transitionPoints; i++) {
+            const t = i / transitionPoints
+            const time = lastPoint.time + t * (24 - lastPoint.time)
+            const value = lastPoint.value + t * (endValue - lastPoint.value)
+            newData.push({ time, value })
+          }
+        }
+      }
+
+      // Ensure the data covers the full 24-hour range
+      if (newData[0].time > 0) {
+        newData.unshift({ time: 0, value: newData[0].value })
+      }
+      if (newData[newData.length - 1].time < 24) {
+        newData.push({ time: 24, value: newData[newData.length - 1].value })
+      }
+
+      // Sort data by time and remove any duplicate points
+      const uniqueData = newData
+        .sort((a, b) => a.time - b.time)
+        .filter((point, index, self) => 
+          index === 0 || 
+          Math.abs(point.time - self[index - 1].time) > 0.001
+        )
+
       series.value[seriesIndex] = {
         ...series.value[seriesIndex],
-        data: newData
+        data: uniqueData
       }
     })
 
@@ -687,6 +768,21 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   const canUndo = computed(() => historyIndex.value > 0)
   const canRedo = computed(() => historyIndex.value < history.value.length - 1)
 
+  // 添加删除系列的方法
+  const deleteSeries = (seriesId) => {
+    const index = series.value.findIndex(s => s.id === seriesId)
+    if (index !== -1) {
+      // 如果这个系列是被选中的，清除选择
+      if (selectedSeries.value.includes(seriesId)) {
+        selectedSeries.value = selectedSeries.value.filter(id => id !== seriesId)
+      }
+      
+      // 删除系列
+      series.value.splice(index, 1)
+      saveState()
+    }
+  }
+
   return {
     series,
     selectedTimeRange,
@@ -708,6 +804,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     replaceWithPattern,
     importData,
     setPreviewSeries,
-    clearPreviewSeries
+    clearPreviewSeries,
+    deleteSeries
   }
 })

@@ -16,6 +16,12 @@ const tools = ref([
     active: false 
   },
   { 
+    id: 'expand', 
+    name: 'Expand',
+    icon: 'expand.svg',
+    active: false 
+  },
+  { 
     id: 'move-y', 
     name: 'Move Y',
     icon: 'move-y.svg',
@@ -25,12 +31,6 @@ const tools = ref([
     id: 'curve', 
     name: 'Curve',
     icon: 'curve.svg',
-    active: false 
-  },
-  { 
-    id: 'expand', 
-    name: 'Expand',
-    icon: 'expand.svg',
     active: false 
   },
   { 
@@ -62,9 +62,8 @@ const hoverTime = ref(null)
 
 const previewCurve = ref(null)
 
-// 定义统一的时间轴配置
 const timeAxisConfig = ref({
-  marginLeft: 60,
+  marginLeft: 100,
   marginRight: 20,
   width: null
 })
@@ -304,55 +303,66 @@ onMounted(() => {
       <div class="h-1/2 border-b border-gray-200 relative">
         <!-- Tools sidebar -->
         <div class="absolute left-0 top-0 bottom-0 w-16 bg-white border-r border-gray-200 flex flex-col items-center py-4 gap-4 toolbar">
-          <button
-            v-for="tool in tools"
-            :key="tool.id"
-            class="w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200"
-            :class="{
-              'bg-purple-100 text-purple-600': tool.active,
-              'bg-white text-gray-600 hover:bg-gray-50': !tool.active,
-              'opacity-50 cursor-not-allowed': !store.selectedTimeRange && tool.id !== 'expand' || 
-                                     (tool.id === 'generate' && !selectedSeriesId)
-            }"
-            :disabled="!store.selectedTimeRange && tool.id !== 'expand' || 
-              (tool.id === 'generate' && !selectedSeriesId)"
-            @click="selectTool(tool.id)"
-            :title="tool.name"
-          >
-            <img :src="`/src/assets/${tool.icon}`" :alt="tool.name" class="w-6 h-6" />
-          </button>
-        </div>
+        <button
+          v-for="tool in tools"
+          :key="tool.id"
+          class="w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200"
+          :class="{
+            // 基础颜色配置
+            'bg-[#FC8E8E]': ['move-x', 'expand'].includes(tool.id),
+            'bg-[#75B2EC]': ['move-y', 'curve'].includes(tool.id),
+            'bg-[#FDC086]': ['clone', 'generate'].includes(tool.id),
+            
+            // 悬停效果
+            'hover:bg-[#FC8E8E]/90': ['move-x', 'expand'].includes(tool.id) && !tool.active,
+            'hover:bg-[#75B2EC]/90': ['move-y', 'curve'].includes(tool.id) && !tool.active,
+            'hover:bg-[#FDC086]/90': ['clone', 'generate'].includes(tool.id) && !tool.active,
+            
+            // 激活状态
+            'shadow-md ring-1 ring-gray-200': tool.active,
+            
+            // 禁用状态
+            'opacity-50 cursor-not-allowed': (!store.selectedTimeRange && tool.id !== 'expand') || 
+              (tool.id === 'generate' && !selectedSeriesId)
+          }"
+          :disabled="(!store.selectedTimeRange && tool.id !== 'expand') || 
+            (tool.id === 'generate' && !selectedSeriesId)"
+          @click="selectTool(tool.id)"
+          :title="tool.name"
+        >
+          <img :src="`/src/assets/${tool.icon}`" :alt="tool.name" class="w-6 h-6" />
+        </button>
+      </div>
 
         <!-- Chart area -->
         <div class="ml-16 flex h-full">
           <div :class="{ 'w-[70%]': showSidePanel, 'w-full': !showSidePanel }" class="flex flex-col h-full">
-            <div class="px-6 py-4">
-              <div class="text-sm text-gray-600">
-                <template v-if="activeTool === 'expand'">
-                  <template v-if="selections.length > 0">
-                    {{ selections.length }} ranges selected. Click Expand button again to process.
-                  </template>
-                  <template v-else>
-                    Select time ranges to expand. Click and drag to select ranges.
-                  </template>
-                </template>
-                <template v-else-if="selectedSeriesId">
-                  <span class="font-medium text-purple-600">Series {{ selectedSeriesId }} selected.</span>
-                  {{ activeTool ? `Selected tool: ${activeTool}` : 'Click and drag to select a time range' }}
-                  <template v-if="store.selectedTimeRange">
-                    ({{ formatTime(store.selectedTimeRange.start) }} - {{ formatTime(store.selectedTimeRange.end) }})
-                  </template>
+            <!-- Status info moved back to top -->
+            <div class="px-6 py-2 text-sm text-gray-600">
+              <template v-if="activeTool === 'expand'">
+                <template v-if="selections.length > 0">
+                  {{ selections.length }} ranges selected. Click Expand button again to process.
                 </template>
                 <template v-else>
-                  {{ activeTool ? `Selected tool: ${activeTool}` : 'Click and drag to select a time range' }}
-                  <template v-if="store.selectedTimeRange">
-                    ({{ formatTime(store.selectedTimeRange.start) }} - {{ formatTime(store.selectedTimeRange.end) }})
-                  </template>
+                  Select time ranges to expand. Click and drag to select ranges.
                 </template>
-              </div>
+              </template>
+              <template v-else-if="selectedSeriesId">
+                <span class="font-medium text-purple-600">Series {{ selectedSeriesId }} selected.</span>
+                {{ activeTool ? `Selected tool: ${activeTool}` : 'Click and drag to select a time range' }}
+                <template v-if="store.selectedTimeRange">
+                  ({{ formatTime(store.selectedTimeRange.start) }} - {{ formatTime(store.selectedTimeRange.end) }})
+                </template>
+              </template>
+              <template v-else>
+                {{ activeTool ? `Selected tool: ${activeTool}` : 'Click and drag to select a time range' }}
+                <template v-if="store.selectedTimeRange">
+                  ({{ formatTime(store.selectedTimeRange.start) }} - {{ formatTime(store.selectedTimeRange.end) }})
+                </template>
+              </template>
             </div>
             
-            <div class="flex-1 px-6 pb-6">
+            <div class="flex-1 px-6 pt-2 pb-4">
               <TimeSeriesChart
                 :series="[...store.series, ...(store.previewSeries ? [store.previewSeries] : [])]"
                 :height="null"
@@ -459,9 +469,12 @@ onMounted(() => {
                         <TimeSeriesChart
                           :series="[{ id: 'preview', data: pattern.data, type: 'original', visible: true }]"
                           :height="120"
-                          :showGrid="false"
+                          :showGrid="true"
+                          :showTimeAxis="false"
                           :isMainChart="false"
                           :isGeneratePreview="true"
+                          :showAxisLabels="true"
+                          :gridDensity="'normal'"
                         />
                       </div>
                     </div>
@@ -492,8 +505,21 @@ onMounted(() => {
       </div>
 
       <!-- Bottom section with series list -->
-      <div class="h-1/2 relative">
-        <div class="absolute inset-0 overflow-y-auto">
+      <div class="h-1/2 flex flex-col">
+        <!-- Fixed time axis -->
+        <div class="flex-none px-6 pt-1 ml-[65px]">
+          <TimeSeriesChart
+            :series="[]"
+            :height="20"
+            :showGrid="false"
+            :isMainChart="false"
+            :timeAxisConfig="timeAxisConfig"
+            class="time-axis-only"
+          />
+        </div>
+
+        <!-- Scrollable series list -->
+        <div class="flex-1 overflow-y-auto">
           <TimeSeriesView
             v-for="s in store.series"
             :key="s.id"
@@ -524,5 +550,12 @@ onMounted(() => {
 .toolbar button :deep(svg path[stroke]) {
   fill: none;
   stroke: currentColor;
+}
+
+.time-axis-only {
+  height: 20px;
+  overflow: visible;
+  margin-bottom: 0;
+  margin-right: 20px;
 }
 </style>
