@@ -148,6 +148,9 @@ const transform = ref(d3.zoomIdentity);
 // 用于存储当前绘制函数的引用
 const currentDrawFunction = ref(null);
 
+// 添加选中状态
+const selectedClusterId = ref(null);
+
 // 创建散点图
 const createScatterPlot = (data) => {
   if (!data || !data.length) return;
@@ -328,8 +331,6 @@ const createScatterPlot = (data) => {
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 1 / t.k;
       ctx.stroke();
-      
-      // 移除簇ID标签的显示，只在悬停时显示
     });
 
     // 如果启用了转移线显示，绘制转移线
@@ -399,9 +400,30 @@ const createScatterPlot = (data) => {
           ctx.closePath();
           ctx.fillStyle = 'rgba(100, 100, 100, 0.8)';
           ctx.fill();
-          
-          // 移除转移次数的显示，只在悬停时显示
         }
+      });
+    }
+
+    // 如果有选中的簇，显示该簇的所有点
+    if (selectedClusterId.value !== null) {
+      // 从allPoints中查找属于选中簇的点
+      allPoints.value.forEach(user => {
+        user.trajectories.forEach(trajectory => {
+          if (trajectory.points && trajectory.timestamps && trajectory.clusters) {
+            trajectory.points.forEach((point, index) => {
+              if (trajectory.clusters[index] == selectedClusterId.value) {
+                ctx.beginPath();
+                ctx.arc(xScale(point[0]), yScale(point[1]), 2 / t.k, 0, 2 * Math.PI);
+                ctx.fillStyle = colorScale(user.id);
+                ctx.globalAlpha = 0.8; // 增加透明度使点更明显
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 0.5 / t.k;
+                ctx.stroke();
+              }
+            });
+          }
+        });
       });
     }
 
@@ -416,7 +438,7 @@ const createScatterPlot = (data) => {
 
   // 缩放行为
   const zoom = d3.zoom()
-    .scaleExtent([0.1, 10])
+    .scaleExtent([0.1, 15])
     .on('zoom', (event) => {
       transform.value = event.transform;
       if (currentDrawFunction.value) {
@@ -453,7 +475,7 @@ const createScatterPlot = (data) => {
       }
     });
 
-    // 如果找到足够近的簇中心点，显示tooltip
+    // 如果找到足够近的簇中心点，高亮显示
     const threshold = 0.1 * (sizeScale(clusterCounts.get(nearestCenter?.clusterId) || 1) / t.k);
     if (nearestCenter && minDistance < threshold) {
       // 重绘基本图形
@@ -483,131 +505,27 @@ const createScatterPlot = (data) => {
       ctx.textBaseline = 'middle';
       ctx.fillText(nearestCenter.clusterId, xScale(nearestCenter.x), yScale(nearestCenter.y));
       
-      // 高亮显示与该簇相关的所有转移
-      if (showTransitions.value) {
-        transitionCounts.forEach((count, transitionKey) => {
-          const [sourceId, targetId] = transitionKey.split('-');
-          
-          // 如果当前簇是源或目标，高亮显示该转移
-          if (sourceId === nearestCenter.clusterId || targetId === nearestCenter.clusterId) {
-            const source = clusterCenters.get(sourceId);
-            const target = clusterCenters.get(targetId);
-            
-            if (source && target) {
-              // 计算线宽
-              const lineWidth = (lineWidthScale(count) + 2) / t.k;
-              
-              // 绘制从源到目标的箭头线
-              const startX = xScale(source.x);
-              const startY = yScale(source.y);
-              const endX = xScale(target.x);
-              const endY = yScale(target.y);
-              
-              // 计算方向向量
-              const dx = endX - startX;
-              const dy = endY - startY;
-              const length = Math.sqrt(dx * dx + dy * dy);
-              
-              // 如果源和目标是同一个点，不绘制
-              if (length < 0.001) return;
-              
-              // 单位向量
-              const unitX = dx / length;
-              const unitY = dy / length;
-              
-              // 计算源和目标簇的半径
-              const sourceRadius = sizeScale(clusterCounts.get(sourceId) || 1) / t.k;
-              const targetRadius = sizeScale(clusterCounts.get(targetId) || 1) / t.k;
-              
-              // 调整起点和终点，使线条从簇边缘开始和结束
-              const adjustedStartX = startX + unitX * sourceRadius;
-              const adjustedStartY = startY + unitY * sourceRadius;
-              const adjustedEndX = endX - unitX * targetRadius;
-              const adjustedEndY = endY - unitY * targetRadius;
-              
-              // 绘制线条
-              ctx.beginPath();
-              ctx.moveTo(adjustedStartX, adjustedStartY);
-              ctx.lineTo(adjustedEndX, adjustedEndY);
-              
-              // 设置线条样式
-              ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
-              ctx.lineWidth = lineWidth;
-              ctx.stroke();
-              
-              // 在线条中间显示转移次数
-              const midX = (adjustedStartX + adjustedEndX) / 2;
-              const midY = (adjustedStartY + adjustedEndY) / 2;
-              
-              ctx.fillStyle = 'black';
-              ctx.font = `${Math.max(10, lineWidth * 1.5) / t.k}px Arial`;
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              
-              // 添加白色背景使文字更清晰
-              const textWidth = ctx.measureText(count.toString()).width;
-              ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-              ctx.fillRect(
-                midX - textWidth / 2 - 2 / t.k,
-                midY - 8 / t.k,
-                textWidth + 4 / t.k,
-                16 / t.k
-              );
-              
-              ctx.fillStyle = 'black';
-              ctx.fillText(count.toString(), midX, midY);
-            }
+      // 从allPoints中查找并显示属于该簇的点
+      allPoints.value.forEach(user => {
+        user.trajectories.forEach(trajectory => {
+          if (trajectory.points && trajectory.timestamps && trajectory.clusters) {
+            trajectory.points.forEach((point, index) => {
+              if (trajectory.clusters[index] == nearestCenter.clusterId) {
+                ctx.beginPath();
+                ctx.arc(xScale(point[0]), yScale(point[1]), 2 / t.k, 0, 2 * Math.PI);
+                ctx.fillStyle = colorScale(user.id);
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 0.5 / t.k;
+                ctx.stroke();
+              }
+            });
           }
         });
-      }
-      
-      ctx.restore();
-      
-      // 显示tooltip
-      tooltip.value.style.display = 'block';
-      tooltip.value.style.left = `${x + 10}px`;
-      tooltip.value.style.top = `${y + 10}px`;
-      
-      // 获取与该簇相关的转移信息
-      const incomingTransitions = [];
-      const outgoingTransitions = [];
-      
-      transitionCounts.forEach((count, transitionKey) => {
-        const [sourceId, targetId] = transitionKey.split('-');
-        
-        if (targetId === nearestCenter.clusterId) {
-          incomingTransitions.push({ from: sourceId, count });
-        }
-        
-        if (sourceId === nearestCenter.clusterId) {
-          outgoingTransitions.push({ to: targetId, count });
-        }
       });
       
-      // 构建tooltip内容
-      let tooltipContent = `<strong>簇ID: ${nearestCenter.clusterId}</strong><br>点数量: ${clusterCounts.get(nearestCenter.clusterId) || 'N/A'}<br>坐标: (${nearestCenter.x.toFixed(2)}, ${nearestCenter.y.toFixed(2)})`;
-      
-      if (incomingTransitions.length > 0) {
-        tooltipContent += '<br><br><strong>转入:</strong><br>';
-        incomingTransitions
-          .sort((a, b) => b.count - a.count)
-          .forEach(t => {
-            tooltipContent += `从簇 ${t.from}: ${t.count} 次<br>`;
-          });
-      }
-      
-      if (outgoingTransitions.length > 0) {
-        tooltipContent += '<br><strong>转出:</strong><br>';
-        outgoingTransitions
-          .sort((a, b) => b.count - a.count)
-          .forEach(t => {
-            tooltipContent += `到簇 ${t.to}: ${t.count} 次<br>`;
-          });
-      }
-      
-      tooltip.value.innerHTML = tooltipContent;
+      ctx.restore();
     } else {
-      tooltip.value.style.display = 'none';
       // 重绘基本散点图
       if (currentDrawFunction.value) {
         currentDrawFunction.value();
@@ -615,7 +533,50 @@ const createScatterPlot = (data) => {
     }
   };
 
+  // 添加点击事件处理
+  const handleClick = (event) => {
+    const rect = canvas.value.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // 转换鼠标坐标到数据空间
+    const t = transform.value;
+    const dataX = xScale.invert((x - t.x) / t.k);
+    const dataY = yScale.invert((y - t.y) / t.k);
+    
+    // 找到最近的簇中心点
+    let nearestCenter = null;
+    let minDistance = Infinity;
+    
+    clusterCenters.forEach((center, clusterId) => {
+      const dx = center.x - dataX;
+      const dy = center.y - dataY;
+      const distance = dx * dx + dy * dy;
+      
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestCenter = { ...center, clusterId };
+      }
+    });
+
+    // 如果找到足够近的簇中心点，更新选中状态
+    const threshold = 0.1 * (sizeScale(clusterCounts.get(nearestCenter?.clusterId) || 1) / t.k);
+    if (nearestCenter && minDistance < threshold) {
+      // 如果点击的是当前选中的簇，取消选中
+      if (selectedClusterId.value === nearestCenter.clusterId) {
+        selectedClusterId.value = null;
+      } else {
+        selectedClusterId.value = nearestCenter.clusterId;
+      }
+      // 重绘图表
+      if (currentDrawFunction.value) {
+        currentDrawFunction.value();
+      }
+    }
+  };
+
   canvas.value.addEventListener('mousemove', handleMouseMove);
+  canvas.value.addEventListener('click', handleClick);
   
   // 初始绘制
   draw();
@@ -623,17 +584,18 @@ const createScatterPlot = (data) => {
   // 清理函数
   return () => {
     canvas.value.removeEventListener('mousemove', handleMouseMove);
+    canvas.value.removeEventListener('click', handleClick);
   };
 };
 
 // 处理模型变化
-const handleModelChange = async () => {
-  await fetchProjectionData();
+const handleModelChange = () => {
+  // 移除这里的fetchProjectionData调用，让watch来处理
 };
 
 // 处理聚合方式变化
-const handleAggregationChange = async () => {
-  await fetchProjectionData();
+const handleAggregationChange = () => {
+  // 移除这里的fetchProjectionData调用，让watch来处理
 };
 
 // 处理eps参数变化（添加防抖）
@@ -710,7 +672,7 @@ watch([selectedModel, selectedAggregation], () => {
   if (datasetStore.getCurrentDataset) {
     fetchProjectionData();
   }
-});
+}, { immediate: true });
 </script>
 
 <style scoped>

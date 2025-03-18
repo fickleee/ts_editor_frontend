@@ -1,7 +1,7 @@
 <template>
   <div ref="container" class="w-full h-full relative">
     <!-- 固定在顶部的概览区域 -->
-    <div class="w-full h-[200px] border-b border-gray-300">
+    <div class="w-full h-[200px] border-gray-300">
       <div ref="overviewChart" class="w-full h-full"></div>
     </div>
     
