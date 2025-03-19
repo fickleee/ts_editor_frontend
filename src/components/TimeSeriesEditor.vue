@@ -474,15 +474,27 @@ onMounted(() => {
                     >
                       <div class="flex justify-between items-center mb-2">
                         <div class="text-sm text-gray-600">
-                          Time range: {{ formatTime(pattern.start) }} - {{ formatTime(pattern.end) }}
+                          <span class="mr-2">Source: {{ pattern.sourceName }}</span>
+                          <span v-if="pattern.sourceType !== 'original'" 
+                                :class="`px-1 py-0.5 text-xs rounded ${
+                                  pattern.sourceType === 'LF' ? 'bg-yellow-100 text-yellow-800' : 
+                                  pattern.sourceType === 'MF' ? 'bg-pink-100 text-pink-800' : 
+                                  'bg-indigo-100 text-indigo-800'
+                                }`"
+                          >
+                            {{ pattern.sourceType }}
+                          </span>
                         </div>
                         <div class="text-sm text-purple-600">
                           Similarity: {{ (pattern.similarity * 100).toFixed(1) }}%
                         </div>
                       </div>
-                      <div class="h-[120px]">
+                      <div class="text-sm text-gray-600 mb-2">
+                        Time range: {{ formatTime(pattern.start) }} - {{ formatTime(pattern.end) }}
+                      </div>
+                      <div class="h-[120px]" :style="`border-left: 3px solid ${pattern.color}`">
                         <TimeSeriesChart
-                          :series="[{ id: 'preview', data: pattern.data, type: 'original', visible: true }]"
+                          :series="[{ id: 'preview', data: pattern.data, type: 'original', visible: true, color: pattern.color }]"
                           :height="120"
                           :showGrid="true"
                           :showTimeAxis="false"

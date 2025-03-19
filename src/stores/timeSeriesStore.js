@@ -403,73 +403,102 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const { start, end } = selectedTimeRange.value
     const duration = end - start
 
-    // Get values at selection boundaries
+    // 获取当前选择区域的边界值
     const sourceData = sourceSeries.data
     const leftValue = interpolateValue(sourceData, start)
     const rightValue = interpolateValue(sourceData, end)
 
-    // Get the selected pattern data
+    // 获取所选模式的数据
     const selectedPattern = sourceData.filter(p => 
       p && !isNaN(p.time) && !isNaN(p.value) && 
       p.time >= start && p.time <= end
     )
 
-    // Sliding window through the data
-    for (let i = 0; i < sourceData.length; i++) {
-      const point = sourceData[i]
-      if (!point || isNaN(point.time) || isNaN(point.value)) continue
+    // 遍历所有曲线数据
+    for (const currentSeries of series.value) {
+      // 获取当前曲线数据
+      const currentData = currentSeries.data
       
-      const windowStart = point.time
-      const windowEnd = windowStart + duration
+      // 使用滑动窗口搜索相似模式
+      for (let i = 0; i < currentData.length; i++) {
+        const point = currentData[i]
+        if (!point || isNaN(point.time) || isNaN(point.value)) continue
+        
+        const windowStart = point.time
+        const windowEnd = windowStart + duration
 
-      if (windowEnd > 24) break
+        if (windowEnd > 24) break
 
-      // Skip the current selection to avoid recommending the same pattern
-      if (Math.abs(windowStart - start) < 0.1 && Math.abs(windowEnd - end) < 0.1) continue
+        // 跳过与当前选择相同的区域
+        if (currentSeries.id === seriesId && 
+            Math.abs(windowStart - start) < 0.1 && 
+            Math.abs(windowEnd - end) < 0.1) continue
 
-      const windowData = sourceData.filter(p => 
-        p && !isNaN(p.time) && !isNaN(p.value) && 
-        p.time >= windowStart && p.time <= windowEnd
-      )
-      
-      if (windowData.length < 2) continue
+        const windowData = currentData.filter(p => 
+          p && !isNaN(p.time) && !isNaN(p.value) && 
+          p.time >= windowStart && p.time <= windowEnd
+        )
+        
+        if (windowData.length < 2) continue
 
-      // Get values at window boundaries
-      const windowLeftValue = interpolateValue(sourceData, windowStart)
-      const windowRightValue = interpolateValue(sourceData, windowEnd)
+        // 获取边界值
+        const windowLeftValue = interpolateValue(currentData, windowStart)
+        const windowRightValue = interpolateValue(currentData, windowEnd)
 
-      // Calculate similarity based on both shape and boundary values
-      const shapeSimilarity = calculateShapeSimilarity(selectedPattern, windowData)
+        // 只基于边界值计算相似度
+        const leftDiff = Math.abs(leftValue - windowLeftValue)
+        const rightDiff = Math.abs(rightValue - windowRightValue)
+        
+        // 边界值差异归一化为相似度 (0-1)
+        const maxPossibleDiff = 10  // 假设最大可能差异是10
+        const leftSimilarity = 1 - Math.min(leftDiff / maxPossibleDiff, 1)
+        const rightSimilarity = 1 - Math.min(rightDiff / maxPossibleDiff, 1)
+        
+        // 计算综合相似度，只基于边界匹配
+        const similarity = (leftSimilarity + rightSimilarity) / 2
 
-      const boundaryDiff = Math.abs(leftValue - windowLeftValue) + Math.abs(rightValue - windowRightValue)
-      const boundarySimilarity = 1 / (1 + boundaryDiff / 100)
-
-      // Combine both similarities with weights
-      const similarity = shapeSimilarity * 0.7 + boundarySimilarity * 0.3
-
-      // Only include patterns with high similarity
-      if (similarity > 0.7) {
-        patterns.push({
-          start: windowStart,
-          end: windowEnd,
-          data: windowData,
-          similarity,
-          leftValue: windowLeftValue,
-          rightValue: windowRightValue
-        })
+        // 仅包含相似度高的模式
+        if (similarity > 0.7) {
+          // 根据曲线类型设置颜色
+          let seriesColor;
+          switch (currentSeries.type) {
+            case 'LF':
+              seriesColor = '#92400E'; // 低频颜色
+              break;
+            case 'MF':
+              seriesColor = '#9D174D'; // 中频颜色
+              break;
+            case 'HF':
+              seriesColor = '#3730A3'; // 高频颜色
+              break;
+            default:
+              // 使用序号生成颜色
+              const colorIndex = series.value.findIndex(s => s.id === currentSeries.id) % 3;
+              const defaultColors = ['#2563eb', '#dc2626', '#16a34a']; // 蓝色、红色、绿色
+              seriesColor = defaultColors[colorIndex >= 0 ? colorIndex : 0];
+          }
+          
+          patterns.push({
+            seriesId: currentSeries.id,
+            start: windowStart,
+            end: windowEnd,
+            data: windowData,
+            similarity,
+            leftValue: windowLeftValue,
+            rightValue: windowRightValue,
+            color: seriesColor,
+            sourceName: currentSeries.id, // 添加来源曲线名称
+            sourceType: currentSeries.type || 'original' // 添加来源曲线类型
+          });
+        }
       }
     }
 
-    // Sort by similarity (higher is better) and remove duplicates
-    return patterns
-      .sort((a, b) => b.similarity - a.similarity)
-      .filter((pattern, index, self) => 
-        index === self.findIndex(p => 
-          Math.abs(p.start - pattern.start) < 0.1 &&
-          Math.abs(p.end - pattern.end) < 0.1
-        )
-      )
-      .slice(0, 3) // Show only top 3 patterns
+    // 根据相似度排序
+    patterns.sort((a, b) => b.similarity - a.similarity)
+    
+    // 返回前10个最相似的模式
+    return patterns.slice(0, 10)
   }
 
   const interpolateValue = (data, time) => {
@@ -495,59 +524,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     
     const t = (time - prev.time) / (next.time - prev.time)
     return prev.value + t * (next.value - prev.value)
-  }
-
-  const calculateShapeSimilarity = (pattern1, pattern2) => {
-    if (pattern1.length < 2 || pattern2.length < 2) return 0
-
-    // Filter out invalid points
-    const validPattern1 = pattern1.filter(p => 
-      p && p.time !== null && p.time !== undefined && 
-      p.value !== null && p.value !== undefined && 
-      !isNaN(p.time) && !isNaN(p.value)
-    )
-    
-    const validPattern2 = pattern2.filter(p => 
-      p && p.time !== null && p.time !== undefined && 
-      p.value !== null && p.value !== undefined && 
-      !isNaN(p.time) && !isNaN(p.value)
-    )
-    
-    if (validPattern1.length < 2 || validPattern2.length < 2) return 0
-
-    // Normalize time and values to [0,1] range
-    const normalizeData = (data) => {
-      const timeMin = Math.min(...data.map(p => p.time))
-      const timeMax = Math.max(...data.map(p => p.time))
-      const valueMin = Math.min(...data.map(p => p.value))
-      const valueMax = Math.max(...data.map(p => p.value))
-      
-      // Avoid division by zero
-      const timeRange = timeMax - timeMin
-      const valueRange = valueMax - valueMin
-      
-      return data.map(p => ({
-        time: timeRange < 0.0001 ? 0 : (p.time - timeMin) / timeRange,
-        value: valueRange < 0.0001 ? 0 : (p.value - valueMin) / valueRange
-      }))
-    }
-
-    const norm1 = normalizeData(validPattern1)
-    const norm2 = normalizeData(validPattern2)
-
-    // Calculate Euclidean distance between normalized patterns
-    let sumSquaredDiff = 0
-    const samples = 100
-    
-    for (let i = 0; i < samples; i++) {
-      const t = i / (samples - 1)
-      const v1 = interpolateValue(norm1, t)
-      const v2 = interpolateValue(norm2, t)
-      const diff = v1 - v2
-      sumSquaredDiff += diff * diff
-    }
-
-    return 1 / (1 + Math.sqrt(sumSquaredDiff / samples))
   }
 
   const replaceWithPattern = (pattern, seriesId) => {
