@@ -37,6 +37,10 @@ const props = defineProps({
     type: String,
     default: 'normal',
     validator: value => ['sparse', 'normal', 'dense'].includes(value)
+  },
+  cloneHighlightArea: {
+    type: Object,
+    default: null
   }
 })
 
@@ -52,7 +56,7 @@ const emit = defineEmits([
 
 const chartRef = ref()
 const svg = ref()
-const margin = { top: 20, right: 20, bottom: 0, left: 50 }
+const margin = { top: 20, right: 20, bottom: 0, left: 35 }
 const isDragging = ref(false)
 const dragStartX = ref(null)
 const dragStartY = ref(null)
@@ -451,6 +455,35 @@ const initChart = () => {
       .selectAll('text')
       .style('font-size', '10px')
   }
+
+  // 绘制克隆高亮区域（如果有）
+  if (props.cloneHighlightArea && props.isMainChart) {
+    const { seriesId, start, end } = props.cloneHighlightArea
+    
+    // 检查要高亮的系列是否存在
+    const targetSeries = props.series.find(s => s.id === seriesId)
+    if (targetSeries) {
+      // 创建高亮矩形
+      g.append('rect')
+        .attr('class', 'clone-highlight')
+        .attr('x', xScale(start))
+        .attr('y', 0)
+        .attr('width', xScale(end) - xScale(start))
+        .attr('height', height)
+        .attr('fill', 'rgba(124, 58, 237, 0.2)') // 紫色带透明度
+        .attr('stroke', '#7C3AED')  // 紫色边框
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '4,4') // 虚线边框
+        .attr('rx', 4) // 圆角
+        .transition()
+        .duration(200)
+        .style('opacity', 0.8)
+        .transition()
+        .delay(800)
+        .duration(200)
+        .style('opacity', 0)
+    }
+  }
 }
 
 // Watch for hover time changes
@@ -506,6 +539,7 @@ watch(() => props.multiSelect, (newValue) => {
   initChart()
 })
 watch(() => props.activeTool, initChart)
+watch(() => props.cloneHighlightArea, initChart)
 
 onMounted(() => {
   initChart()
@@ -576,5 +610,9 @@ onMounted(() => {
 
 .line-hover-area {
   cursor: pointer;
+}
+
+.clone-highlight {
+  pointer-events: none;
 }
 </style>

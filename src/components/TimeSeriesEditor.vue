@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useTimeSeriesStore } from '../stores/timeSeriesStore'
 import TimeSeriesChart from './TimeSeriesChart.vue'
 import TimeSeriesView from './TimeSeriesView.vue'
@@ -67,6 +67,8 @@ const timeAxisConfig = ref({
   marginRight: 20,
   width: null
 })
+
+const cloneHighlightArea = ref(null)
 
 const showSidePanel = computed(() => {
   return activeTool.value === 'curve' || activeTool.value === 'generate'
@@ -148,6 +150,18 @@ const handleChartClick = (time, value) => {
       if (store.selectedTimeRange) {
         if (selectedSeriesId.value) {
           store.cloneSeries(selectedSeriesId.value, time)
+          
+          const { start, end } = store.selectedTimeRange
+          const duration = end - start
+          cloneHighlightArea.value = {
+            seriesId: selectedSeriesId.value,
+            start: time,
+            end: time + duration
+          }
+          
+          setTimeout(() => {
+            cloneHighlightArea.value = null
+          }, 1000)
         } else {
           store.selectedSeries.forEach(id => {
             store.cloneSeries(id, time)
@@ -373,6 +387,7 @@ onMounted(() => {
                 :isMainChart="true"
                 :hoveredSeriesId="hoveredSeriesId"
                 :timeAxisConfig="timeAxisConfig"
+                :cloneHighlightArea="cloneHighlightArea"
                 @click="handleChartClick"
                 @drag="handleChartDrag"
                 @dragStart="handleDragStart"

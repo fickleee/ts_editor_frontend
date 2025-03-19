@@ -305,7 +305,7 @@ const applyDecomposition = async () => {
     <!-- 显示框中的控制按钮区域 -->
     <div class="flex relative h-[120px]">
       <!-- 左侧控件空间 -->
-      <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-2">
+      <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-1">
         <!-- 可视标记按钮 -->
         <button 
           @click.stop="toggleVisibility" 
@@ -329,7 +329,7 @@ const applyDecomposition = async () => {
         <button 
           v-if="series.type === 'original'"
           @click.stop="toggleDecomposition" 
-          class="p-2 rounded hover:bg-gray-100"
+          class="mr-6 p-2 rounded hover:bg-gray-100"
           title="Decompose series"
         >
           <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -353,7 +353,7 @@ const applyDecomposition = async () => {
       </div>
       
       <!-- 图表容器，确保与下方时间轴对齐 - 向右拉伸 -->
-      <div class="flex-1 relative">
+      <div class="flex-1 relative pr-1">
         <!-- 始终显示曲线，不受可见性影响 -->
         <TimeSeriesChart
           :series="[{...series, visible: true}]"
@@ -366,8 +366,7 @@ const applyDecomposition = async () => {
         />
       </div>
       
-      <!-- 右侧边距减小 -->
-      <div class="w-[10px] flex-none" v-if="timeAxisConfig.marginRight"></div>
+
     </div>
 
     <!-- 分解设置面板 -->
@@ -448,7 +447,7 @@ const applyDecomposition = async () => {
               <!-- 子曲线的可视标记按钮 -->
               <button 
                 @click.stop="toggleChildVisibility(ds)" 
-                class="p-2 rounded hover:bg-gray-100"
+                class="mr-6 p-2 rounded hover:bg-gray-100"
                 title="Toggle visibility in main view"
               >
                 <span v-if="ds.visible" class="text-gray-800">
@@ -466,7 +465,7 @@ const applyDecomposition = async () => {
             </div>
             
             <!-- 图表区域 - 向右拉伸 -->
-            <div class="flex-1 relative">
+            <div class="flex-1 relative pr-0">
               <!-- 始终显示子曲线，不受可见性影响 -->
               <TimeSeriesChart
                 :series="[{...ds, visible: true}]"
@@ -479,8 +478,8 @@ const applyDecomposition = async () => {
               />
             </div>
             
-            <!-- 右侧边距减小 -->
-            <div class="w-[10px] flex-none" v-if="timeAxisConfig.marginRight"></div>
+
+
           </div>
         </div>
       </div>
@@ -516,7 +515,7 @@ const applyDecomposition = async () => {
 }
 
 .time-series-item {
-  border-left: 4px solid transparent;
+  border-left: 12px solid transparent;
 }
 
 .time-series-item:hover {
