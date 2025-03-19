@@ -3,7 +3,13 @@
     <!-- 加载动画 -->
     <div v-if="isLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
       <div class="flex flex-col items-center gap-2">
-        <div class="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+        <div 
+          :style="{
+            '--theme-color-light': THEME_COLOR_LIGHT,
+            '--theme-color': THEME_COLOR
+          }"
+          class="w-8 h-8 border-4 border-[var(--theme-color-light)] border-t-[var(--theme-color)] rounded-full animate-spin"
+        ></div>
         <span class="text-sm text-gray-600">loading...</span>
       </div>
     </div>
@@ -14,7 +20,7 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import * as d3 from 'd3';
 import { reqDataDay } from '@/api';
-import { GREEN_GRADIENT_COLORS } from '@/utils/constants';
+import { GREEN_GRADIENT_COLORS, THEME_COLOR, THEME_COLOR_LIGHT } from '@/utils/constants';
 import { useDatasetStore } from '../stores/datasetStore';
 import { reqDataDayMultiple } from '../api';
 
@@ -186,6 +192,26 @@ watch(data, async (newData) => {
     createConcentricDonuts(newData, chartContainer.value);
   }
 }, { deep: true });
+
+// 监听选中用户变化
+watch(() => datasetStore.getSelectedUserId, (newUserId) => {
+  if (!chartContainer.value) return;
+
+  const svg = d3.select(chartContainer.value).select('svg');
+  if (!svg.empty()) {
+    // 移除所有高亮效果
+    svg.selectAll('path')
+      .attr('stroke', 'none');
+
+    // 如果有选中的用户，高亮对应的圆环
+    if (newUserId !== null) {
+      svg.selectAll(`.ring-${newUserId} path`)
+        .attr('stroke', '#FFD700')
+        .attr('stroke-width', 2)
+        .raise();
+    }
+  }
+});
 </script>
 
 <style scoped>

@@ -61,4 +61,12 @@ import RadialView from './components/RadialView.vue';
 [style*="border"] {
   border-style: solid;
 }
+
+/* 添加全局文字不可选中样式 */
+:global(*) {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
 </style>

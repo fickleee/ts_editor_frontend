@@ -4,6 +4,11 @@ export const ORIGINAL_HEIGHT = 40;
 export const BORDER_WIDTH = 3;
 export const BORDER_COLOR = "#EAEAEA";
 
+// 主题色配置
+export const THEME_COLOR = "#8B5FFF";
+export const THEME_COLOR_HOVER = "#9D79FF";
+export const THEME_COLOR_LIGHT = "#F5F2FE";
+
 // 环形图的绿色渐变色数组
 export const GREEN_GRADIENT_COLORS = [
   '#f7fcf5',
@@ -24,11 +29,11 @@ export const MATRIX_CHART = {
   
   // 颜色配置
   COLORS: {
-    WORKDAY_LINE: '#377eb8',     // 工作日线条颜色
-    WEEKEND_LINE: '#e41a1c',     // 周末线条颜色
-    MAIN_LINE: '#4daf4a',        // 主数据线颜色
-    AVERAGE_LINE: '#FF5722',     // 平均值线条颜色
-    BOX_PLOT: '#69b3a2',         // 箱线图填充颜色
+    WORKDAY_LINE: '#D4A554',     // 工作日线条颜色
+    WEEKEND_LINE: '#70AAB5',     // 周末线条颜色
+    MAIN_LINE: '#666666',        // 主数据线颜色
+    AVERAGE_LINE: '#666666',     // 平均值线条颜色
+    BOX_PLOT: '#F5F2FE',         // 箱线图填充颜色
     GRID_LINE: '#e5e7eb',        // 网格线颜色
     USER_LABEL: '#374151',       // 用户标签文字颜色
     TIME_LABEL: '#6b7280',       // 时间标签文字颜色

@@ -3,7 +3,13 @@
     <!-- 加载动画 -->
     <div v-if="isLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
       <div class="flex flex-col items-center gap-2">
-        <div class="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+        <div 
+          :style="{
+            '--theme-color-light': THEME_COLOR_LIGHT,
+            '--theme-color': THEME_COLOR
+          }"
+          class="w-8 h-8 border-4 border-[var(--theme-color-light)] border-t-[var(--theme-color)] rounded-full animate-spin"
+        ></div>
         <span class="text-sm text-gray-600">loading...</span>
       </div>
     </div>
@@ -14,12 +20,17 @@
       <div class="relative">
         <button 
           @click="isModelOpen = !isModelOpen"
-          class="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors duration-200"
+          :style="{
+            borderColor: THEME_COLOR,
+            color: THEME_COLOR
+          }"
+          class="flex items-center justify-between w-[80px] pb-0 hover:text-purple-600 transition-colors duration-200 border-b-2"
         >
-          <span class="text-sm font-medium">{{ selectedModel }}</span>
+          <span class="text-sm font-semibold flex-1 text-center">{{ selectedModel }}</span>
           <!-- 下拉箭头 -->
           <svg 
-            class="h-4 w-4 transition-transform duration-200"
+            :style="{ color: THEME_COLOR }"
+            class="h-4 w-4 transition-transform duration-200 flex-shrink-0"
             :class="{ 'rotate-180': isModelOpen }"
             viewBox="0 0 20 20"
             fill="currentColor"
@@ -30,7 +41,7 @@
         <!-- 下拉菜单 -->
         <div 
           v-if="isModelOpen"
-          class="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg py-1 z-20"
+          class="absolute top-full left-0 mt-1 w-[80px] bg-white rounded-lg shadow-lg py-1 z-20"
         >
           <button
             v-for="model in ['umap', 'tsne', 'pca']"
@@ -40,10 +51,12 @@
               isModelOpen = false;
               handleModelChange();
             }"
-            class="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 text-gray-700 hover:text-purple-600"
-            :class="{ 'bg-purple-50 text-purple-600': selectedModel === model }"
+            :style="{
+              '--hover-color': THEME_COLOR
+            }"
+            class="w-full px-3 py-1.5 text-center text-xs hover:text-[var(--hover-color)] text-gray-700 font-semibold"
           >
-            {{ model.toUpperCase() }}
+            {{ model }}
           </button>
         </div>
       </div>
@@ -52,12 +65,17 @@
       <div class="relative">
         <button 
           @click="isAggregationOpen = !isAggregationOpen"
-          class="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors duration-200"
+          :style="{
+            borderColor: THEME_COLOR,
+            color: THEME_COLOR
+          }"
+          class="flex items-center justify-between w-[80px] pb-0 hover:text-purple-600 transition-colors duration-200 border-b-2"
         >
-          <span class="text-sm font-medium">{{ selectedAggregation }}</span>
+          <span class="text-sm font-semibold flex-1 text-center">{{ selectedAggregation }}</span>
           <!-- 下拉箭头 -->
           <svg 
-            class="h-4 w-4 transition-transform duration-200"
+            :style="{ color: THEME_COLOR }"
+            class="h-4 w-4 transition-transform duration-200 flex-shrink-0"
             :class="{ 'rotate-180': isAggregationOpen }"
             viewBox="0 0 20 20"
             fill="currentColor"
@@ -68,7 +86,7 @@
         <!-- 下拉菜单 -->
         <div 
           v-if="isAggregationOpen"
-          class="absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg py-1 z-20"
+          class="absolute top-full left-0 mt-1 w-[80px] bg-white rounded-lg shadow-lg py-1 z-20"
         >
           <button
             v-for="option in ['all', 'day', 'week']"
@@ -78,37 +96,37 @@
               isAggregationOpen = false;
               handleAggregationChange();
             }"
-            class="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 text-gray-700 hover:text-purple-600"
-            :class="{ 'bg-purple-50 text-purple-600': selectedAggregation === option }"
+            :style="{
+              '--hover-color': THEME_COLOR
+            }"
+            class="w-full px-3 py-1.5 text-center text-xs hover:text-[var(--hover-color)] text-gray-700 font-semibold"
           >
-            {{ option.charAt(0).toUpperCase() + option.slice(1) }}
+            {{ option }}
           </button>
         </div>
       </div>
 
       <!-- eps参数调整滑块 -->
       <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-600">eps:</span>
+        <span :style="{
+              '--theme-color': THEME_COLOR
+            }" class="text-sm text-[var(--theme-color)] font-semibold">eps:</span>
         <input 
           type="range" 
           v-model="epsValue" 
           min="0.5" 
           max="10" 
           step="0.5"
-          class="w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+          :style="{
+            '--theme-color': THEME_COLOR
+          }"
+          class="w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[var(--theme-color)]"
           @input="handleEpsChange"
         />
-        <span class="text-sm text-gray-600 w-6 text-left">{{ epsValue }}</span>
+        <span :style="{
+              '--theme-color': THEME_COLOR
+            }" class="text-sm text-[var(--theme-color)] w-6 text-left font-semibold">{{ epsValue }}</span>
       </div>
-      
-      <!-- 显示转移线开关 -->
-      <!-- <div class="flex items-center">
-        <label class="inline-flex items-center cursor-pointer">
-          <input type="checkbox" v-model="showTransitions" class="sr-only peer" @change="draw">
-          <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-          <span class="ml-2 text-sm font-medium text-gray-700">show arrows</span>
-        </label>
-      </div> -->
     </div>
 
     <canvas ref="canvas" class="absolute top-0 left-0"></canvas>
@@ -125,7 +143,7 @@ import * as d3 from 'd3';
 import { useDatasetStore } from '../stores/datasetStore';
 import { reqDataCluster } from '../api';
 import { useDebounceFn } from '@vueuse/core';
-
+import { THEME_COLOR, THEME_COLOR_LIGHT } from '@/utils/constants';
 const container = ref(null);
 const canvas = ref(null);
 const svg = ref(null);
@@ -133,8 +151,8 @@ const tooltip = ref(null);
 const datasetStore = useDatasetStore();
 
 // 选择状态
-const selectedModel = ref('tsne');
-const selectedAggregation = ref('all');
+const selectedModel = ref('umap');
+const selectedAggregation = ref('day');
 const showTransitions = ref(true); // 控制是否显示转移线
 const epsValue = ref(1.0); // 添加eps参数
 const isModelOpen = ref(false);
@@ -144,6 +162,11 @@ const isLoading = ref(false);
 // 存储所有的点数据
 const allPoints = ref([]);
 const transform = ref(d3.zoomIdentity);
+
+// 添加比例尺相关的响应式变量
+const xScale = ref(null);
+const yScale = ref(null);
+const colorScale = ref(null);
 
 // 用于存储当前绘制函数的引用
 const currentDrawFunction = ref(null);
@@ -239,17 +262,17 @@ const createScatterPlot = (data) => {
   const xExtent = d3.extent(points, d => d.x);
   const yExtent = d3.extent(points, d => d.y);
 
-  // 创建比例尺
-  const xScale = d3.scaleLinear()
+  // 更新比例尺
+  xScale.value = d3.scaleLinear()
     .domain([xExtent[0], xExtent[1]])
     .range([margin.left, width - margin.right]);
 
-  const yScale = d3.scaleLinear()
+  yScale.value = d3.scaleLinear()
     .domain([yExtent[0], yExtent[1]])
     .range([height - margin.bottom, margin.top]);
 
-  // 创建颜色比例尺（基于簇ID）
-  const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+  // 更新颜色比例尺
+  colorScale.value = d3.scaleOrdinal(d3.schemeCategory10);
   
   // 创建大小比例尺（基于簇中的点数量）
   const maxCount = Math.max(...clusterCounts.values());
@@ -277,21 +300,21 @@ const createScatterPlot = (data) => {
     ctx.scale(t.k, t.k);
     
     ctx.beginPath();
-    ctx.moveTo(xScale(trajectoryPoints[0].x), yScale(trajectoryPoints[0].y));
+    ctx.moveTo(xScale.value(trajectoryPoints[0].x), yScale.value(trajectoryPoints[0].y));
     
     for (let i = 1; i < trajectoryPoints.length; i++) {
-      ctx.lineTo(xScale(trajectoryPoints[i].x), yScale(trajectoryPoints[i].y));
+      ctx.lineTo(xScale.value(trajectoryPoints[i].x), yScale.value(trajectoryPoints[i].y));
     }
     
-    ctx.strokeStyle = colorScale(userId);
+    ctx.strokeStyle = colorScale.value(userId);
     ctx.lineWidth = 2 / t.k; // 根据缩放调整线宽
     ctx.stroke();
     
     // 在轨迹点上绘制小圆点，标记时间顺序
     trajectoryPoints.forEach((point, index) => {
       ctx.beginPath();
-      ctx.arc(xScale(point.x), yScale(point.y), 2 / t.k, 0, 2 * Math.PI);
-      ctx.fillStyle = colorScale(userId);
+      ctx.arc(xScale.value(point.x), yScale.value(point.y), 2 / t.k, 0, 2 * Math.PI);
+      ctx.fillStyle = colorScale.value(userId);
       ctx.fill();
       
       // 添加时间标记
@@ -299,8 +322,8 @@ const createScatterPlot = (data) => {
         ctx.fillStyle = 'black';
         ctx.font = `${12 / t.k}px Arial`;
         ctx.fillText(point.timestamp.split(' ')[1], 
-          xScale(point.x) + 5 / t.k, 
-          yScale(point.y) - 5 / t.k);
+          xScale.value(point.x) + 5 / t.k, 
+          yScale.value(point.y) - 5 / t.k);
       }
     });
     
@@ -324,8 +347,8 @@ const createScatterPlot = (data) => {
       const radius = sizeScale(count) / t.k;
       
       ctx.beginPath();
-      ctx.arc(xScale(center.x), yScale(center.y), radius, 0, 2 * Math.PI);
-      ctx.fillStyle = colorScale(clusterId);
+      ctx.arc(xScale.value(center.x), yScale.value(center.y), radius, 0, 2 * Math.PI);
+      ctx.fillStyle = colorScale.value(clusterId);
       ctx.globalAlpha = 0.7;
       ctx.fill();
       ctx.strokeStyle = 'white';
@@ -346,10 +369,10 @@ const createScatterPlot = (data) => {
           const lineWidth = lineWidthScale(count) / t.k;
           
           // 绘制从源到目标的箭头线
-          const startX = xScale(source.x);
-          const startY = yScale(source.y);
-          const endX = xScale(target.x);
-          const endY = yScale(target.y);
+          const startX = xScale.value(source.x);
+          const startY = yScale.value(source.y);
+          const endX = xScale.value(target.x);
+          const endY = yScale.value(target.y);
           
           // 计算方向向量
           const dx = endX - startX;
@@ -413,8 +436,8 @@ const createScatterPlot = (data) => {
             trajectory.points.forEach((point, index) => {
               if (trajectory.clusters[index] == selectedClusterId.value) {
                 ctx.beginPath();
-                ctx.arc(xScale(point[0]), yScale(point[1]), 2 / t.k, 0, 2 * Math.PI);
-                ctx.fillStyle = colorScale(user.id);
+                ctx.arc(xScale.value(point[0]), yScale.value(point[1]), 2 / t.k, 0, 2 * Math.PI);
+                ctx.fillStyle = colorScale.value(user.id);
                 ctx.globalAlpha = 0.8; // 增加透明度使点更明显
                 ctx.fill();
                 ctx.strokeStyle = 'white';
@@ -457,8 +480,8 @@ const createScatterPlot = (data) => {
     
     // 转换鼠标坐标到数据空间
     const t = transform.value;
-    const dataX = xScale.invert((x - t.x) / t.k);
-    const dataY = yScale.invert((y - t.y) / t.k);
+    const dataX = xScale.value.invert((x - t.x) / t.k);
+    const dataY = yScale.value.invert((y - t.y) / t.k);
     
     // 找到最近的簇中心点
     let nearestCenter = null;
@@ -493,7 +516,7 @@ const createScatterPlot = (data) => {
       
       // 绘制高亮边框
       ctx.beginPath();
-      ctx.arc(xScale(nearestCenter.x), yScale(nearestCenter.y), radius + 2 / t.k, 0, 2 * Math.PI);
+      ctx.arc(xScale.value(nearestCenter.x), yScale.value(nearestCenter.y), radius + 2 / t.k, 0, 2 * Math.PI);
       ctx.strokeStyle = 'black';
       ctx.lineWidth = 2 / t.k;
       ctx.stroke();
@@ -503,7 +526,7 @@ const createScatterPlot = (data) => {
       ctx.font = `${Math.min(12, radius * t.k)}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(nearestCenter.clusterId, xScale(nearestCenter.x), yScale(nearestCenter.y));
+      ctx.fillText(nearestCenter.clusterId, xScale.value(nearestCenter.x), yScale.value(nearestCenter.y));
       
       // 从allPoints中查找并显示属于该簇的点
       allPoints.value.forEach(user => {
@@ -512,8 +535,8 @@ const createScatterPlot = (data) => {
             trajectory.points.forEach((point, index) => {
               if (trajectory.clusters[index] == nearestCenter.clusterId) {
                 ctx.beginPath();
-                ctx.arc(xScale(point[0]), yScale(point[1]), 2 / t.k, 0, 2 * Math.PI);
-                ctx.fillStyle = colorScale(user.id);
+                ctx.arc(xScale.value(point[0]), yScale.value(point[1]), 2 / t.k, 0, 2 * Math.PI);
+                ctx.fillStyle = colorScale.value(user.id);
                 ctx.fill();
                 ctx.strokeStyle = 'white';
                 ctx.lineWidth = 0.5 / t.k;
@@ -541,8 +564,8 @@ const createScatterPlot = (data) => {
     
     // 转换鼠标坐标到数据空间
     const t = transform.value;
-    const dataX = xScale.invert((x - t.x) / t.k);
-    const dataY = yScale.invert((y - t.y) / t.k);
+    const dataX = xScale.value.invert((x - t.x) / t.k);
+    const dataY = yScale.value.invert((y - t.y) / t.k);
     
     // 找到最近的簇中心点
     let nearestCenter = null;
@@ -673,6 +696,58 @@ watch([selectedModel, selectedAggregation], () => {
     fetchProjectionData();
   }
 }, { immediate: true });
+
+// 监听选中用户变化
+watch(() => datasetStore.getSelectedUserId, (newUserId) => {
+  if (!canvas.value || !currentDrawFunction.value || !xScale.value || !yScale.value || !colorScale.value) return;
+
+  // 重绘图表以应用新的高亮效果
+  currentDrawFunction.value();
+
+  // 如果有选中的用户，高亮显示该用户的轨迹
+  if (newUserId !== null) {
+    const ctx = canvas.value.getContext('2d');
+    const t = transform.value;
+    
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.scale(t.k, t.k);
+
+    // 高亮显示选中用户的轨迹
+    allPoints.value.forEach(user => {
+      if (user.id === newUserId) {
+        user.trajectories.forEach(trajectory => {
+          if (trajectory.points && trajectory.timestamps && trajectory.clusters) {
+            // 绘制轨迹线
+            ctx.beginPath();
+            ctx.moveTo(xScale.value(trajectory.points[0][0]), yScale.value(trajectory.points[0][1]));
+            
+            for (let i = 1; i < trajectory.points.length; i++) {
+              ctx.lineTo(xScale.value(trajectory.points[i][0]), yScale.value(trajectory.points[i][1]));
+            }
+            
+            ctx.strokeStyle = colorScale.value(user.id);
+            ctx.lineWidth = 3 / t.k;
+            ctx.stroke();
+
+            // 绘制轨迹点
+            trajectory.points.forEach((point, index) => {
+              ctx.beginPath();
+              ctx.arc(xScale.value(point[0]), yScale.value(point[1]), 3 / t.k, 0, 2 * Math.PI);
+              ctx.fillStyle = colorScale.value(user.id);
+              ctx.fill();
+              ctx.strokeStyle = 'white';
+              ctx.lineWidth = 1 / t.k;
+              ctx.stroke();
+            });
+          }
+        });
+      }
+    });
+
+    ctx.restore();
+  }
+});
 </script>
 
 <style scoped>

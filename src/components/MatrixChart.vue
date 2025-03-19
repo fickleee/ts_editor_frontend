@@ -17,7 +17,13 @@
     <!-- 全局加载动画 -->
     <div v-if="isLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
       <div class="flex flex-col items-center gap-2">
-        <div class="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+        <div 
+          :style="{
+            '--theme-color-light': THEME_COLOR_LIGHT,
+            '--theme-color': THEME_COLOR
+          }"
+          class="w-8 h-8 border-4 border-[var(--theme-color-light)] border-t-[var(--theme-color)] rounded-full animate-spin"
+        ></div>
         <span class="text-sm text-gray-600">loading...</span>
       </div>
     </div>
@@ -30,7 +36,8 @@ import * as d3 from 'd3';
 import { reqDataDay, reqDataWeek, reqDataOriginal, reqDataAllUserWeek, reqDataDayMultiple, reqDataAllUserWeekMultiple, reqDataOriginalMultiple } from '@/api';
 import { useDatasetStore } from '../stores/datasetStore';
 import { ElMessage } from 'element-plus';
-import { MATRIX_CHART } from '@/utils/constants';
+import { MATRIX_CHART, THEME_COLOR, THEME_COLOR_LIGHT } from '@/utils/constants';
+
 
 const container = ref(null);
 const overviewChart = ref(null);
@@ -304,14 +311,7 @@ const createOverviewChart = (data, container) => {
     const boxGroup = svg.append('g')
       .attr('transform', `translate(${x}, 0)`);
     
-    // 绘制中位线
-    boxGroup.append('line')
-      .attr('x1', -boxWidth * 0.3)
-      .attr('x2', boxWidth * 0.3)
-      .attr('y1', yScale(median))
-      .attr('y2', yScale(median))
-      .attr('stroke', '#000')
-      .attr('stroke-width', 2);
+
     
     // 绘制box
     boxGroup.append('rect')
@@ -320,15 +320,22 @@ const createOverviewChart = (data, container) => {
       .attr('width', boxWidth * 0.6)
       .attr('height', yScale(q1) - yScale(q3))
       .attr('fill', MATRIX_CHART.COLORS.BOX_PLOT)
-      .attr('stroke', '#000');
-    
+      .attr('stroke', THEME_COLOR);
+        // 绘制中位线
+    boxGroup.append('line')
+      .attr('x1', -boxWidth * 0.3)
+      .attr('x2', boxWidth * 0.3)
+      .attr('y1', yScale(median))
+      .attr('y2', yScale(median))
+      .attr('stroke', THEME_COLOR)
+      .attr('stroke-width', 2);
     // 绘制上须线
     boxGroup.append('line')
       .attr('x1', 0)
       .attr('x2', 0)
       .attr('y1', yScale(q3))
       .attr('y2', yScale(max))
-      .attr('stroke', '#000');
+      .attr('stroke', THEME_COLOR);
     
     // 绘制下须线
     boxGroup.append('line')
@@ -336,7 +343,7 @@ const createOverviewChart = (data, container) => {
       .attr('x2', 0)
       .attr('y1', yScale(q1))
       .attr('y2', yScale(min))
-      .attr('stroke', '#000');
+      .attr('stroke', THEME_COLOR);
     
     // 绘制上下横线
     boxGroup.append('line')
@@ -344,14 +351,14 @@ const createOverviewChart = (data, container) => {
       .attr('x2', boxWidth * 0.3)
       .attr('y1', yScale(max))
       .attr('y2', yScale(max))
-      .attr('stroke', '#000');
+      .attr('stroke', THEME_COLOR);
     
     boxGroup.append('line')
       .attr('x1', -boxWidth * 0.3)
       .attr('x2', boxWidth * 0.3)
       .attr('y1', yScale(min))
       .attr('y2', yScale(min))
-      .attr('stroke', '#000');
+      .attr('stroke', THEME_COLOR);
     
     // 绘制异常点
     sorted.forEach(dataPoint => {
@@ -468,6 +475,9 @@ const createOverviewChart = (data, container) => {
                 } else {
                   console.warn('User group not found:', `.user-${dataPoint.userId}`);
                 }
+
+                // 更新 store 中的选中用户
+                datasetStore.setSelectedUserId(dataPoint.userId);
               }, 100);
             })
             .on('mouseout', function() {
@@ -494,6 +504,9 @@ const createOverviewChart = (data, container) => {
                   .attr('stroke-opacity', MATRIX_CHART.OPACITY.AVERAGE_LINE)
                   .attr('filter', null);
               }
+
+              // 清除 store 中的选中用户
+              datasetStore.setSelectedUserId(null);
             });
           
           // 添加鼠标悬停提示
