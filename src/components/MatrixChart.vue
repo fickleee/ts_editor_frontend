@@ -854,7 +854,7 @@ const createLineChart = (data, container, allUserDataByWeek) => {
               // 判断是工作日还是周末
               const lineColor = isWeekend ? 
                 MATRIX_CHART.COLORS.WEEKEND_LINE : 
-                MATRIX_CHART.COLORS.WORKDAY_LINE;
+                MATRIX_CHART.COLORS.WEEKDAY_LINE;
               
               userGroup.append('path')
                 .datum(weekDataPoints)

@@ -17,12 +17,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import * as d3 from 'd3';
 import { reqDataDay } from '@/api';
-import { GREEN_GRADIENT_COLORS, THEME_COLOR, THEME_COLOR_LIGHT } from '@/utils/constants';
+import { GREEN_GRADIENT_COLORS, THEME_COLOR, THEME_COLOR_LIGHT, WEEKDAY_COLOR, WEEKEND_COLOR } from '@/utils/constants';
 import { useDatasetStore } from '../stores/datasetStore';
 import { reqDataDayMultiple } from '../api';
+import { generateGradientColors } from '@/utils/generateColor';
 
 const datasetStore = useDatasetStore();
 
@@ -66,10 +67,25 @@ const createConcentricDonuts = (data, container) => {
   const minValue = Math.min(...allValues);
   const maxValue = Math.max(...allValues);
 
+  // 根据工作日/周末状态选择合适的颜色
+  let targetColor;
+  if (datasetStore.getShowWeekday && datasetStore.getShowWeekend) {
+    targetColor = THEME_COLOR; // 两者都选择时使用主题色
+  } else if (datasetStore.getShowWeekday) {
+    targetColor = WEEKDAY_COLOR; // 只选择工作日时
+  } else if (datasetStore.getShowWeekend) {
+    targetColor = WEEKEND_COLOR; // 只选择周末时
+  } else {
+    targetColor = THEME_COLOR; // 默认使用主题色
+  }
+
+  // 使用generateGradientColors生成渐变色数组
+  const gradientColors = generateGradientColors(targetColor, 10); // 10个渐变层次
+
   // 创建颜色比例尺
   const colorScale = d3.scaleQuantize()
     .domain([minValue, maxValue])
-    .range(GREEN_GRADIENT_COLORS);
+    .range(gradientColors);
 
   // 计算每个环的参数
   const availableRadius = centerRadius - minRadius; // 可用半径空间
@@ -148,7 +164,10 @@ const fetchData = async () => {
       data.value = await reqDataDayMultiple(datasetStore.getCurrentDataset, datasetStore.selectedVariable);
     }
     else {
-      data.value = await reqDataDay(datasetStore.getCurrentDataset);
+      let dayType = 'day' 
+      if (datasetStore.getShowWeekday & !datasetStore.getShowWeekend) dayType = 'weekday'
+      if (!datasetStore.getShowWeekday & datasetStore.getShowWeekend) dayType = 'weekend'
+      data.value = await reqDataDay(datasetStore.getCurrentDataset, dayType);
     }
   } catch (error) {
     console.error('Error fetching data:', error);
@@ -211,6 +230,14 @@ watch(() => datasetStore.getSelectedUserId, (newUserId) => {
         .raise();
     }
   }
+});
+
+// 监听工作日和非工作日的选择变化
+watch([
+  () => datasetStore.getShowWeekday,
+  () => datasetStore.getShowWeekend
+], async () => {
+  await fetchData();
 });
 </script>
 

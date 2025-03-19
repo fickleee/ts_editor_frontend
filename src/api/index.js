@@ -15,7 +15,7 @@ const API = {
 
 export const reqDataOriginal = (dataset) => request.get(API.GET_DATA_ORIGINAL_URL + `?dataset=${dataset}`)  
 export const reqDataOriginalMultiple = (dataset, variable) => request.get(API.GET_DATA_ORIGINAL_MULTIPLE_URL + `?dataset=${dataset}&variable=${variable}`)
-export const reqDataDay = (dataset) => request.get(API.GET_DATA_DAY_URL + `?dataset=${dataset}`)  
+export const reqDataDay = (dataset, dayType = 'day') => request.get(API.GET_DATA_DAY_URL + `?dataset=${dataset}&dayType=${dayType}`)  
 export const reqDataDayMultiple = (dataset, variable) => request.get(API.GET_DATA_DAY_MULTIPLE_URL + `?dataset=${dataset}&variable=${variable}`)
 export const reqDataWeek = (dataset) => request.get(API.GET_DATA_WEEK_URL + `?dataset=${dataset}`)
 export const reqDataAllUserWeek = (dataset) => request.get(API.GET_DATA_ALL_USER_WEEK_URL + `?dataset=${dataset}`)  

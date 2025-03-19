@@ -21,7 +21,8 @@ export const GREEN_GRADIENT_COLORS = [
   '#006d2c',
   '#00441b'
 ];
-
+export const WEEKDAY_COLOR = "#D4A554";
+export const WEEKEND_COLOR = "#70AAB5";
 // MatrixChart 配置
 export const MATRIX_CHART = {
   // 用户条带高度(像素)
@@ -29,8 +30,8 @@ export const MATRIX_CHART = {
   
   // 颜色配置
   COLORS: {
-    WORKDAY_LINE: '#D4A554',     // 工作日线条颜色
-    WEEKEND_LINE: '#70AAB5',     // 周末线条颜色
+    WEEKDAY_LINE: WEEKDAY_COLOR,     // 工作日线条颜色
+    WEEKEND_LINE: WEEKEND_COLOR,     // 周末线条颜色
     MAIN_LINE: '#666666',        // 主数据线颜色
     AVERAGE_LINE: '#666666',     // 平均值线条颜色
     BOX_PLOT: '#F5F2FE',         // 箱线图填充颜色
