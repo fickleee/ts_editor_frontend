@@ -10,13 +10,13 @@
           }"
           class="w-8 h-8 border-4 border-[var(--theme-color-light)] border-t-[var(--theme-color)] rounded-full animate-spin"
         ></div>
-        <span class="text-sm text-gray-600">loading...</span>
+        <span :style="{ color: THEME_COLOR }" class="text-sm font-semibold">loading...</span>
       </div>
     </div>
 
     <!-- 控制面板 -->
     <div 
-      v-if="datasetStore.getCurrentDataset && datasetStore.getCurrentDataset !== 'capture'"
+      v-if="datasetStore.getCurrentDataset"
       class="absolute top-2 w-full px-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 z-10"
     >
       <!-- 左侧下拉选择框 -->
@@ -94,7 +94,7 @@
             class="absolute top-full left-0 mt-1 w-[80px] bg-white rounded-lg shadow-lg py-1 z-20"
           >
             <button
-              v-for="option in ['all', 'day', 'week']"
+              v-for="option in aggregationOptions"
               :key="option"
               @click="() => {
                 selectedAggregation = option;
@@ -149,12 +149,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import * as d3 from 'd3';
 import { useDatasetStore } from '../stores/datasetStore';
 import { reqDataCluster } from '../api';
 import { useDebounceFn } from '@vueuse/core';
-import { THEME_COLOR, THEME_COLOR_LIGHT } from '@/utils/constants';
+import { THEME_COLOR, THEME_COLOR_LIGHT, PROJECTION_VIEW } from '@/utils/constants';
 const container = ref(null);
 const canvas = ref(null);
 const svg = ref(null);
@@ -184,6 +184,11 @@ const currentDrawFunction = ref(null);
 
 // 添加选中状态
 const selectedClusterId = ref(null);
+
+// 聚合方式选择
+const aggregationOptions = computed(() => {
+  return datasetStore.getCurrentDataset === 'capture' ? ['all'] : ['all', 'day', 'week'];
+});
 
 // 创建散点图
 const createScatterPlot = (data) => {
@@ -359,7 +364,7 @@ const createScatterPlot = (data) => {
       
       ctx.beginPath();
       ctx.arc(xScale.value(center.x), yScale.value(center.y), radius, 0, 2 * Math.PI);
-      ctx.fillStyle = colorScale.value(clusterId);
+      ctx.fillStyle = PROJECTION_VIEW.CLUSTER_COLOR;
       ctx.globalAlpha = 0.7;
       ctx.fill();
       ctx.strokeStyle = 'white';
@@ -656,8 +661,9 @@ const fetchProjectionData = async () => {
     // 将模型、聚合方式和eps参数作为参数传递给API
     const data = await reqDataCluster(
       datasetStore.getCurrentDataset,
+      datasetStore.getCurrentDataset == 'capture' ? datasetStore.selectedVariable : 'null',
       selectedModel.value,
-      selectedAggregation.value,
+      datasetStore.getCurrentDataset == 'capture' ? 'all' : selectedAggregation.value,
       epsValue.value
     );
     allPoints.value = data;
@@ -690,10 +696,6 @@ onUnmounted(() => {
 
 // 监听数据集变化
 watch(() => datasetStore.getCurrentDataset, (newDataset) => {
-  // TODO: 暂时不支持capture数据集的投影视图
-  if (newDataset === 'capture') {
-    return;
-  }
   if (newDataset) {
     fetchProjectionData();
   } else {

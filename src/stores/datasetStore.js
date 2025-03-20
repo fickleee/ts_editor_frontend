@@ -8,12 +8,14 @@ export const useDatasetStore = defineStore('dataset', () => {
   const showWeekday = ref(true); // 添加工作日显示状态
   const showWeekend = ref(true); // 添加周末显示状态
   const selectedUserId = ref(null); // 添加当前选中的用户ID
+  const selectedView = ref(null); // 添加当前选中的视图
 
   // 计算属性
   const getCurrentDataset = computed(() => currentDataset.value);
   const getShowWeekday = computed(() => showWeekday.value);
   const getShowWeekend = computed(() => showWeekend.value);
   const getSelectedUserId = computed(() => selectedUserId.value);
+  const getSelectedView = computed(() => selectedView.value);
 
   // 方法
   function setDataset(dataset) {
@@ -43,6 +45,10 @@ export const useDatasetStore = defineStore('dataset', () => {
     selectedUserId.value = userId;
   }
 
+  function setSelectedView(view) {
+    selectedView.value = view;
+  }
+
   return {
     currentDataset,
     aggregationLevel,
@@ -54,11 +60,13 @@ export const useDatasetStore = defineStore('dataset', () => {
     getShowWeekday,
     getShowWeekend,
     getSelectedUserId,
+    getSelectedView,
     setDataset,
     setAggregationLevel,
     setSelectedVariable,
     setShowWeekday,
     setShowWeekend,
     setSelectedUserId,
+    setSelectedView,
   };
 }); 

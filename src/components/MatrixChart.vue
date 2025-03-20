@@ -24,7 +24,7 @@
           }"
           class="w-8 h-8 border-4 border-[var(--theme-color-light)] border-t-[var(--theme-color)] rounded-full animate-spin"
         ></div>
-        <span class="text-sm text-gray-600">loading...</span>
+        <span :style="{ color: THEME_COLOR }" class="text-sm font-semibold">loading...</span>
       </div>
     </div>
   </div>
@@ -33,7 +33,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import * as d3 from 'd3';
-import { reqDataDay, reqDataWeek, reqDataOriginal, reqDataAllUserWeek, reqDataDayMultiple, reqDataAllUserWeekMultiple, reqDataOriginalMultiple } from '@/api';
+import { reqDataDay, reqDataOriginal, reqDataAllUserWeek, reqDataDayMultiple, reqDataOriginalMultiple } from '@/api';
 import { useDatasetStore } from '../stores/datasetStore';
 import { ElMessage } from 'element-plus';
 import { MATRIX_CHART, THEME_COLOR, THEME_COLOR_LIGHT } from '@/utils/constants';
@@ -372,7 +372,7 @@ const createOverviewChart = (data, container) => {
           outlierGroup.append('circle')
             .attr('cx', 0)
             .attr('cy', yScale(dataPoint.value))
-            .attr('r', 1.5)
+            .attr('r', 2)
             .attr('fill', colorScale(dataPoint.userId))
             .attr('stroke', '#000')
             .attr('stroke-width', 0.3)
@@ -424,66 +424,65 @@ const createOverviewChart = (data, container) => {
               
               // 滚动到对应用户视图并高亮数据
               scrollToUserAndHighlight(dataPoint.userId, dataPoint.weekday);
+              // 更新 store 中的选中用户
+              datasetStore.setSelectedUserId(dataPoint.userId);
+              datasetStore.setSelectedView('matrix');
               
-              // 延迟一点执行高亮，确保滚动完成后再高亮
-              setTimeout(() => {
-                // 高亮下方用户视图中的对应数据
-                const userGroup = d3.select(lineChart.value).select(`.user-${dataPoint.userId}`);
-                if (!userGroup.empty()) {
-                  // 清除之前的高亮背景（如果有）
-                  userGroup.selectAll('.highlight-background').remove();
+              // 高亮下方用户视图中的对应数据
+              const userGroup = d3.select(lineChart.value).select(`.user-${dataPoint.userId}`);
+              if (!userGroup.empty()) {
+                // 清除之前的高亮背景（如果有）
+                userGroup.selectAll('.highlight-background').remove();
+                
+                // 添加闪烁高亮背景
+                const highlightBg = userGroup.append('rect')
+                  .attr('class', 'highlight-background')
+                  .attr('x', 0)
+                  .attr('y', 0)
+                  .attr('width', containerWidth)
+                  .attr('height', userStripHeight)
+                  .attr('fill', MATRIX_CHART.COLORS.HIGHLIGHT_BG)
+                  .attr('opacity', MATRIX_CHART.OPACITY.HIGHLIGHT_BG);
+                
+
+                // 指定时间后移除高亮背景
+                setTimeout(() => {
+                  highlightBg.remove();
+                }, MATRIX_CHART.ANIMATION.HIGHLIGHT_DURATION);
+
+                // 高亮对应工作日的数据线
+                const weekLines = userGroup.selectAll(`.week-line.day-${dataPoint.weekday}`);
+                weekLines
+                  .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_HIGHLIGHT_WIDTH)
+                  .attr('stroke-opacity', MATRIX_CHART.OPACITY.WEEK_LINE_NORMAL)
+                  .attr('filter', 'drop-shadow(0 0 2px rgba(0,0,0,0.3))');
+                
+
+                // 高亮主数据线
+                userGroup.select('.line')
+                  .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_HIGHLIGHT_WIDTH)
+                  .attr('stroke-opacity', 1)
+                  .attr('filter', 'drop-shadow(0 0 2px rgba(0,0,0,0.3))');
+
+                // 其他工作日的数据线降低透明度
+                userGroup.selectAll('.week-line')
+                  .filter(function() {
+                    return !this.classList.contains(`day-${dataPoint.weekday}`);
+                  })
+                  .attr('stroke-opacity', MATRIX_CHART.OPACITY.WEEK_LINE_DIMMED);
                   
-                  // 添加闪烁高亮背景
-                  const highlightBg = userGroup.append('rect')
-                    .attr('class', 'highlight-background')
-                    .attr('x', 0)
-                    .attr('y', 0)
-                    .attr('width', containerWidth)
-                    .attr('height', userStripHeight)
-                    .attr('fill', MATRIX_CHART.COLORS.HIGHLIGHT_BG)
-                    .attr('opacity', MATRIX_CHART.OPACITY.HIGHLIGHT_BG);
-                  
+                // 将用户组提升到最上层，确保高亮效果可见
+                userGroup.raise();
+              } else {
+                console.warn('User group not found:', `.user-${dataPoint.userId}`);
+              }
 
-                  // 指定时间后移除高亮背景
-                  setTimeout(() => {
-                    highlightBg.remove();
-                  }, MATRIX_CHART.ANIMATION.HIGHLIGHT_DURATION);
 
-                  // 高亮对应工作日的数据线
-                  const weekLines = userGroup.selectAll(`.week-line.day-${dataPoint.weekday}`);
-                  weekLines
-                    .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_HIGHLIGHT_WIDTH)
-                    .attr('stroke-opacity', MATRIX_CHART.OPACITY.WEEK_LINE_NORMAL)
-                    .attr('filter', 'drop-shadow(0 0 2px rgba(0,0,0,0.3))');
-                  
-
-                  // 高亮主数据线
-                  userGroup.select('.line')
-                    .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_HIGHLIGHT_WIDTH)
-                    .attr('stroke-opacity', 1)
-                    .attr('filter', 'drop-shadow(0 0 2px rgba(0,0,0,0.3))');
-
-                  // 其他工作日的数据线降低透明度
-                  userGroup.selectAll('.week-line')
-                    .filter(function() {
-                      return !this.classList.contains(`day-${dataPoint.weekday}`);
-                    })
-                    .attr('stroke-opacity', MATRIX_CHART.OPACITY.WEEK_LINE_DIMMED);
-                    
-                  // 将用户组提升到最上层，确保高亮效果可见
-                  userGroup.raise();
-                } else {
-                  console.warn('User group not found:', `.user-${dataPoint.userId}`);
-                }
-
-                // 更新 store 中的选中用户
-                datasetStore.setSelectedUserId(dataPoint.userId);
-              }, 100);
             })
             .on('mouseout', function() {
               // 恢复异常点大小
               d3.select(this)
-                .attr('r', 1.5)
+                .attr('r', 2)
                 .attr('stroke-width', 0.3);
               
               // 隐藏详细视图
@@ -507,6 +506,7 @@ const createOverviewChart = (data, container) => {
 
               // 清除 store 中的选中用户
               datasetStore.setSelectedUserId(null);
+              datasetStore.setSelectedView(null);
             });
           
           // 添加鼠标悬停提示
@@ -1148,4 +1148,43 @@ watch(
     }
   }
 );
+
+watch(() => datasetStore.getSelectedUserId, (newUserId) => {
+  d3.select('.highlight-background').remove();
+
+  
+  if (newUserId && datasetStore.getSelectedView !== 'matrix') {
+    scrollToUserAndHighlight(newUserId, datasetStore.selectedWeekday);
+    const userGroup = d3.select(lineChart.value).select(`.user-${newUserId}`);
+    if (!userGroup.empty()) {
+      // 清除之前的高亮背景（如果有）
+      userGroup.selectAll('.highlight-background').remove();
+      
+      // 获取 lineChart 的宽度
+      const containerWidth = lineChart.value ? lineChart.value.clientWidth : 0;
+
+      // 添加闪烁高亮背景
+      const highlightBg = userGroup.append('rect')
+        .attr('class', 'highlight-background')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', containerWidth)
+        .attr('height', userStripHeight)
+        .attr('fill', MATRIX_CHART.COLORS.HIGHLIGHT_BG)
+        .attr('opacity', MATRIX_CHART.OPACITY.HIGHLIGHT_BG);
+      
+
+      // 指定时间后移除高亮背景
+      setTimeout(() => {
+        highlightBg.remove();
+      }, MATRIX_CHART.ANIMATION.HIGHLIGHT_DURATION);
+
+      
+      // 将用户组提升到最上层，确保高亮效果可见
+      userGroup.raise();
+    } else {
+      console.warn('User group not found:', `.user-${newUserId}`);
+    }
+  }
+}, { immediate: true });
 </script>

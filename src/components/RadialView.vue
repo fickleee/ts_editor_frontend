@@ -6,16 +6,20 @@
       class="absolute top-2 right-2 z-40 w-60 slider-container"
     >
       <div class="flex items-center">
+        <!-- <span 
+            class="text-sm min-w-[30px] text-right font-semibold" 
+            :style="{ color: THEME_COLOR }"
+          >range:</span> -->
         <span 
-          class="text-sm mr-4 min-w-[30px] text-right font-semibold" 
+          class="text-sm mr-4 min-w-[20px] text-right font-semibold" 
           :style="{ color: THEME_COLOR }"
-        >{{ valueRange[0] }}</span>
+        >range: {{ valueRange[0] }}</span>
         <el-slider 
           v-model="valueRange" 
           range 
           :min="minValue" 
           :max="maxValue" 
-          :step="0.1"
+          :step="sliderStep"
           :disabled="isLoading"
           @change="handleRangeChange"
           class="compact-slider flex-1"
@@ -41,14 +45,14 @@
           }"
           class="w-8 h-8 border-4 border-[var(--theme-color-light)] border-t-[var(--theme-color)] rounded-full animate-spin"
         ></div>
-        <span class="text-sm text-gray-600">loading...</span>
+        <span :style="{ color: THEME_COLOR }" class="text-sm font-semibold">loading...</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import * as d3 from 'd3';
 import { reqDataDay } from '@/api';
 import { THEME_COLOR, THEME_COLOR_LIGHT, WEEKDAY_COLOR, WEEKEND_COLOR } from '@/utils/constants';
@@ -67,6 +71,13 @@ const minValue = ref(0);
 const maxValue = ref(100);
 const valueRange = ref([0, 100]);
 const allValues = ref([]);
+
+// 在 script setup 部分添加 sliderStep 计算
+const sliderStep = computed(() => {
+  if (!data.value || !data.value.length) return 0.1;
+  const range = maxValue.value - minValue.value;
+  return range <= 20 ? 0.1 : 1;
+});
 
 // 处理滑块范围变化
 const handleRangeChange = () => {
@@ -194,10 +205,11 @@ const createConcentricDonuts = (data, container) => {
       .attr('data-ring-index', index)  // 添加环的索引到扇形
       .attr('data-value', (d, i) => user.res[i].value) // 添加数值属性
       .on('mouseover', function(event, d) {
+        // 更新 store 中的选中用户，触发其他视图的高亮
+        datasetStore.setSelectedUserId(user.id);
+        datasetStore.setSelectedView('radial');
         const index = d3.select(this).attr('data-index');
         const ringIndex = d3.select(this).attr('data-ring-index');
-        const value = d3.select(this).attr('data-value');
-        const userName = d3.select(`.ring-${user.id}`).attr('data-user-name');
         
         // 高亮相同时刻的扇形
         svg.selectAll('path')
@@ -205,6 +217,7 @@ const createConcentricDonuts = (data, container) => {
             return d3.select(this).attr('data-index') === index;
           })
           .attr('stroke', '#FFD700')
+          .attr('stroke-width', 1)
           .raise();
 
         // 高亮整个圆环
@@ -213,12 +226,17 @@ const createConcentricDonuts = (data, container) => {
             return d3.select(this).attr('data-ring-index') === ringIndex;
           })
           .attr('stroke', '#FFD700')
+          .attr('stroke-width', 1)
           .raise();
+
+
       })
       .on('mouseout', function(event, d) {
         // 移除所有高亮效果
         svg.selectAll('path')
           .attr('stroke', 'none');
+        datasetStore.setSelectedUserId(null);
+        datasetStore.setSelectedView(null);
       });
   });
 
@@ -304,14 +322,16 @@ watch(() => datasetStore.getSelectedUserId, (newUserId) => {
   const svg = d3.select(chartContainer.value).select('svg');
   if (!svg.empty()) {
     // 移除所有高亮效果
-    svg.selectAll('path')
-      .attr('stroke', 'none');
+    if (datasetStore.getSelectedView !== 'radial') {
+      svg.selectAll('path')
+        .attr('stroke', 'none');
+    }
 
     // 如果有选中的用户，高亮对应的圆环
-    if (newUserId !== null) {
+    if (newUserId !== null && datasetStore.getSelectedView !== 'radial') {
       svg.selectAll(`.ring-${newUserId} path`)
         .attr('stroke', '#FFD700')
-        .attr('stroke-width', 2)
+        .attr('stroke-width', 1)
         .raise();
     }
   }

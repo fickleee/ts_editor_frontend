@@ -9,6 +9,11 @@ export const THEME_COLOR = "#8B5FFF";
 export const THEME_COLOR_HOVER = "#9D79FF";
 export const THEME_COLOR_LIGHT = "#F5F2FE";
 
+// 投影视图配置
+export const PROJECTION_VIEW = {
+  CLUSTER_COLOR: "#141B41",  // 簇的颜色
+};
+
 // 环形图的绿色渐变色数组
 export const GREEN_GRADIENT_COLORS = [
   '#f7fcf5',
@@ -57,7 +62,7 @@ export const MATRIX_CHART = {
     WEEK_LINE_NORMAL: 1,         // 周数据线正常透明度
     WEEK_LINE_DIMMED: 0.2,       // 周数据线暗淡透明度
     AVERAGE_LINE: 0.6,           // 平均值线透明度
-    HIGHLIGHT_BG: 0.2,           // 高亮背景透明度
+    HIGHLIGHT_BG: 0.1,           // 高亮背景透明度
   },
 
   // 动画时间

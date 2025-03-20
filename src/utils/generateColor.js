@@ -3,8 +3,8 @@ function generateGradientColors(targetColor, steps) {
   const endColor = hexToRgb(targetColor);
   const gradientColors = [];
 
-  for (let i = 0; i < steps; i++) {
-    const ratio = i / (steps - 1);
+  for (let i = 1; i <= steps; i++) {
+    const ratio = i / steps;
     const color = startColor.map((start, index) => {
       return Math.round(start + ratio * (endColor[index] - start));
     });
