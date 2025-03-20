@@ -15,117 +15,128 @@
     </div>
 
     <!-- 控制面板 -->
-    <div class="absolute top-4 right-4 flex gap-4 z-10">
-      <!-- 模型选择 -->
-      <div class="relative">
-        <button 
-          @click="isModelOpen = !isModelOpen"
-          :style="{
-            borderColor: THEME_COLOR,
-            color: THEME_COLOR
-          }"
-          class="flex items-center justify-between w-[80px] pb-0 hover:text-purple-600 transition-colors duration-200 border-b-2"
-        >
-          <span class="text-sm font-semibold flex-1 text-center">{{ selectedModel }}</span>
-          <!-- 下拉箭头 -->
-          <svg 
-            :style="{ color: THEME_COLOR }"
-            class="h-4 w-4 transition-transform duration-200 flex-shrink-0"
-            :class="{ 'rotate-180': isModelOpen }"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-          </svg>
-        </button>
-        <!-- 下拉菜单 -->
-        <div 
-          v-if="isModelOpen"
-          class="absolute top-full left-0 mt-1 w-[80px] bg-white rounded-lg shadow-lg py-1 z-20"
-        >
-          <button
-            v-for="model in ['umap', 'tsne', 'pca']"
-            :key="model"
-            @click="() => {
-              selectedModel = model;
-              isModelOpen = false;
-              handleModelChange();
-            }"
+    <div 
+      v-if="datasetStore.getCurrentDataset && datasetStore.getCurrentDataset !== 'capture'"
+      class="absolute top-2 w-full px-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 z-10"
+    >
+      <!-- 左侧下拉选择框 -->
+      <div class="flex gap-4">
+        <!-- 模型选择 -->
+        <div class="relative">
+          <button 
+            @click="isModelOpen = !isModelOpen"
             :style="{
-              '--hover-color': THEME_COLOR
+              borderColor: THEME_COLOR,
+              color: THEME_COLOR
             }"
-            class="w-full px-3 py-1.5 text-center text-xs hover:text-[var(--hover-color)] text-gray-700 font-semibold"
+            class="flex items-center justify-between w-[80px] pb-0 hover:text-purple-600 transition-colors duration-200 border-b-2"
           >
-            {{ model }}
+            <span class="text-sm font-semibold flex-1 text-center">{{ selectedModel }}</span>
+            <!-- 下拉箭头 -->
+            <svg 
+              :style="{ color: THEME_COLOR }"
+              class="h-4 w-4 transition-transform duration-200 flex-shrink-0"
+              :class="{ 'rotate-180': isModelOpen }"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
           </button>
+          <!-- 下拉菜单 -->
+          <div 
+            v-if="isModelOpen"
+            class="absolute top-full left-0 mt-1 w-[80px] bg-white rounded-lg shadow-lg py-1 z-20"
+          >
+            <button
+              v-for="model in ['umap', 'tsne', 'pca']"
+              :key="model"
+              @click="() => {
+                selectedModel = model;
+                isModelOpen = false;
+                handleModelChange();
+              }"
+              :style="{
+                '--hover-color': THEME_COLOR
+              }"
+              class="w-full px-3 py-1.5 text-center text-xs hover:text-[var(--hover-color)] text-gray-700 font-semibold"
+            >
+              {{ model }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 聚合方式选择 -->
+        <div class="relative">
+          <button 
+            @click="isAggregationOpen = !isAggregationOpen"
+            :style="{
+              borderColor: THEME_COLOR,
+              color: THEME_COLOR
+            }"
+            class="flex items-center justify-between w-[80px] pb-0 hover:text-purple-600 transition-colors duration-200 border-b-2"
+          >
+            <span class="text-sm font-semibold flex-1 text-center">{{ selectedAggregation }}</span>
+            <!-- 下拉箭头 -->
+            <svg 
+              :style="{ color: THEME_COLOR }"
+              class="h-4 w-4 transition-transform duration-200 flex-shrink-0"
+              :class="{ 'rotate-180': isAggregationOpen }"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          <!-- 下拉菜单 -->
+          <div 
+            v-if="isAggregationOpen"
+            class="absolute top-full left-0 mt-1 w-[80px] bg-white rounded-lg shadow-lg py-1 z-20"
+          >
+            <button
+              v-for="option in ['all', 'day', 'week']"
+              :key="option"
+              @click="() => {
+                selectedAggregation = option;
+                isAggregationOpen = false;
+                handleAggregationChange();
+              }"
+              :style="{
+                '--hover-color': THEME_COLOR
+              }"
+              class="w-full px-3 py-1.5 text-center text-xs hover:text-[var(--hover-color)] text-gray-700 font-semibold"
+            >
+              {{ option }}
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- 聚合方式选择 -->
-      <div class="relative">
-        <button 
-          @click="isAggregationOpen = !isAggregationOpen"
-          :style="{
-            borderColor: THEME_COLOR,
-            color: THEME_COLOR
-          }"
-          class="flex items-center justify-between w-[80px] pb-0 hover:text-purple-600 transition-colors duration-200 border-b-2"
-        >
-          <span class="text-sm font-semibold flex-1 text-center">{{ selectedAggregation }}</span>
-          <!-- 下拉箭头 -->
-          <svg 
+      <!-- 右侧eps参数调整滑块 -->
+      <div class="w-full md:w-60 slider-container">
+        <div class="flex items-center">
+          <span 
+            class="text-sm mr-3 min-w-[30px] text-right font-semibold" 
             :style="{ color: THEME_COLOR }"
-            class="h-4 w-4 transition-transform duration-200 flex-shrink-0"
-            :class="{ 'rotate-180': isAggregationOpen }"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-          </svg>
-        </button>
-        <!-- 下拉菜单 -->
-        <div 
-          v-if="isAggregationOpen"
-          class="absolute top-full left-0 mt-1 w-[80px] bg-white rounded-lg shadow-lg py-1 z-20"
-        >
-          <button
-            v-for="option in ['all', 'day', 'week']"
-            :key="option"
-            @click="() => {
-              selectedAggregation = option;
-              isAggregationOpen = false;
-              handleAggregationChange();
-            }"
+          >eps:</span>
+          <el-slider 
+            v-model="epsValue" 
+            :min="0.5" 
+            :max="10" 
+            :step="0.5"
+            :disabled="isLoading"
+            @change="handleEpsChange"
+            class="compact-slider flex-1"
             :style="{
-              '--hover-color': THEME_COLOR
+              '--el-slider-main-bg-color': THEME_COLOR,
+              '--el-color-primary': THEME_COLOR
             }"
-            class="w-full px-3 py-1.5 text-center text-xs hover:text-[var(--hover-color)] text-gray-700 font-semibold"
-          >
-            {{ option }}
-          </button>
+          />
+          <span 
+            class="text-sm ml-3 min-w-[30px] text-left font-semibold"
+            :style="{ color: THEME_COLOR }"
+          >{{ epsValue }}</span>
         </div>
-      </div>
-
-      <!-- eps参数调整滑块 -->
-      <div class="flex items-center gap-2">
-        <span :style="{
-              '--theme-color': THEME_COLOR
-            }" class="text-sm text-[var(--theme-color)] font-semibold">eps:</span>
-        <input 
-          type="range" 
-          v-model="epsValue" 
-          min="0.5" 
-          max="10" 
-          step="0.5"
-          :style="{
-            '--theme-color': THEME_COLOR
-          }"
-          class="w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[var(--theme-color)]"
-          @input="handleEpsChange"
-        />
-        <span :style="{
-              '--theme-color': THEME_COLOR
-            }" class="text-sm text-[var(--theme-color)] w-6 text-left font-semibold">{{ epsValue }}</span>
       </div>
     </div>
 
@@ -753,5 +764,31 @@ watch(() => datasetStore.getSelectedUserId, (newUserId) => {
 <style scoped>
 canvas {
   touch-action: none;
+}
+
+/* 滑块样式定制 */
+.slider-container :deep(.el-slider) {
+  height: 28px;
+}
+
+.slider-container :deep(.el-slider__runway) {
+  height: 5px;
+  margin: 14px 0;
+}
+
+.slider-container :deep(.el-slider__bar) {
+  height: 5px;
+}
+
+.slider-container :deep(.el-slider__button-wrapper) {
+  height: 22px;
+  width: 22px;
+  top: -9px;
+}
+
+.slider-container :deep(.el-slider__button) {
+  height: 14px;
+  width: 14px;
+  border-color: var(--el-color-primary);
 }
 </style> 
