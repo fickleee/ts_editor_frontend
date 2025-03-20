@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import * as d3 from 'd3'
 
 const props = defineProps({
@@ -10,331 +10,477 @@ const props = defineProps({
 
 const emit = defineEmits(['change'])
 
-const editorRef = ref()
+const svgRef = ref(null)
 const controlPoints = ref([
-  { x: 0, y: 0 },
-  { x: 0.5, y: 0.5 },
-  { x: 1, y: 1 }
+  { x: 0, y: 0, fixed: true },
+  { x: 0.2, y: 0.2 },
+  { x: 0.8, y: 0.8 },
+  { x: 1, y: 1, fixed: true }
 ])
+const isDragging = ref(false)
+const activePointIndex = ref(null)
 
-let resizeObserver = null
-let resizeTimeout = null
+const margin = { top: 20, right: 30, bottom: 30, left: 40 }
 
-// Computed property for the preview curve
-const previewCurve = computed(() => {
-  // Generate a smooth curve with more points for preview
-  const points = []
-  const numPoints = 100
-  
-  // Use d3's curve interpolation to generate smooth points
-  const curveInterpolate = d3.scaleLinear()
-    .domain(controlPoints.value.map(p => p.x))
-    .range(controlPoints.value.map(p => p.y))
-    .clamp(true)
-  
-  for (let i = 0; i <= numPoints; i++) {
-    const x = i / numPoints
-    points.push({
-      x: x,
-      y: curveInterpolate(x)
-    })
-  }
-  
-  return points
-})
+// 修改为扩展范围到 200%
+const yDomain = [0, 2] // 扩展到 200%
 
-const initEditor = () => {
-  if (!editorRef.value) return
+const initChart = () => {
+  if (!svgRef.value || !props.visible) return
 
-  // Get container dimensions
-  const container = editorRef.value
-  const containerWidth = container.clientWidth
-  const containerHeight = Math.min(containerWidth, 300) // Limit height to avoid excessive space
-  
-  const margin = { top: 20, right: 20, bottom: 30, left: 30 }
-  const width = containerWidth
-  const height = containerHeight
+  const svg = d3.select(svgRef.value)
+  svg.selectAll('*').remove()
 
-  // Clear previous SVG
-  d3.select(container).selectAll('*').remove()
-
-  // Create SVG with viewBox for better scaling
-  const svg = d3.select(container)
-    .append('svg')
-    .attr('width', '100%')
-    .attr('height', '100%')
-    .attr('viewBox', `0 0 ${width} ${height}`)
-    .attr('preserveAspectRatio', 'xMidYMid meet')
+  const width = svgRef.value.clientWidth
+  const height = svgRef.value.clientHeight
+  const innerWidth = width - margin.left - margin.right
+  const innerHeight = height - margin.top - margin.bottom
 
   const g = svg.append('g')
     .attr('transform', `translate(${margin.left},${margin.top})`)
 
-  // Create scales
   const xScale = d3.scaleLinear()
     .domain([0, 1])
-    .range([0, width - margin.left - margin.right])
+    .range([0, innerWidth])
 
   const yScale = d3.scaleLinear()
-    .domain([0, 1])
-    .range([height - margin.top - margin.bottom, 0])
+    .domain(yDomain)
+    .range([innerHeight, 0])
 
-  // Add grid
-  const grid = g.append('g')
+  // 添加网格线
+  g.append('g')
     .attr('class', 'grid')
-    .style('stroke', '#e5e7eb')
-    .style('stroke-width', 0.5)
+    .selectAll('line.horizontal')
+    .data(d3.range(0, 2.1, 0.25)) // 更多的网格线
+    .enter()
+    .append('line')
+    .attr('class', 'horizontal')
+    .attr('x1', 0)
+    .attr('x2', innerWidth)
+    .attr('y1', d => yScale(d))
+    .attr('y2', d => yScale(d))
+    .attr('stroke', d => d === 1 ? '#9CA3AF' : '#E5E7EB')
+    .attr('stroke-width', d => d === 1 ? 1.5 : 0.5)
+    .attr('stroke-dasharray', d => d === 1 ? null : '2,2')
 
-  // Vertical grid lines
-  grid.selectAll('line.vertical')
+  g.append('g')
+    .attr('class', 'grid')
+    .selectAll('line.vertical')
     .data(d3.range(0, 1.1, 0.1))
     .enter()
     .append('line')
+    .attr('class', 'vertical')
     .attr('x1', d => xScale(d))
     .attr('x2', d => xScale(d))
     .attr('y1', 0)
-    .attr('y2', height - margin.top - margin.bottom)
+    .attr('y2', innerHeight)
+    .attr('stroke', '#E5E7EB')
+    .attr('stroke-width', 0.5)
+    .attr('stroke-dasharray', '2,2')
 
-  // Horizontal grid lines
-  grid.selectAll('line.horizontal')
-    .data(d3.range(0, 1.1, 0.1))
-    .enter()
-    .append('line')
-    .attr('x1', 0)
-    .attr('x2', width - margin.left - margin.right)
-    .attr('y1', d => yScale(d))
-    .attr('y2', d => yScale(d))
+  // 添加比例示意
+  g.append('text')
+    .attr('x', innerWidth - 120)
+    .attr('y', 15)
+    .attr('text-anchor', 'start')
+    .attr('fill', '#9CA3AF')
+    .attr('font-size', '12px')
+    .text('200% ↑')
 
-  // Add reference line
-  g.append('line')
-    .attr('class', 'reference')
-    .attr('x1', xScale(0))
-    .attr('y1', yScale(0))
-    .attr('x2', xScale(1))
-    .attr('y2', yScale(1))
-    .style('stroke', '#9ca3af')
-    .style('stroke-width', 1)
-    .style('stroke-dasharray', '4,4')
+  g.append('text')
+    .attr('x', innerWidth - 120)
+    .attr('y', innerHeight / 2)
+    .attr('text-anchor', 'start')
+    .attr('fill', '#9CA3AF')
+    .attr('font-size', '12px')
+    .text('100% →')
 
-  // Create curve line
+  g.append('text')
+    .attr('x', innerWidth - 120)
+    .attr('y', innerHeight - 5)
+    .attr('text-anchor', 'start')
+    .attr('fill', '#9CA3AF')
+    .attr('font-size', '12px')
+    .text('0% ↓')
+
+  // 添加 x 轴
+  g.append('g')
+    .attr('class', 'x-axis')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(xScale)
+      .ticks(5)
+      .tickFormat(d3.format('.1f')))
+    .selectAll('text')
+    .style('font-size', '10px')
+
+  // 添加 y 轴
+  g.append('g')
+    .attr('class', 'y-axis')
+    .call(d3.axisLeft(yScale)
+      .ticks(8)
+      .tickFormat(d => `${d * 100}%`))
+    .selectAll('text')
+    .style('font-size', '10px')
+
+  // 创建贝塞尔曲线
   const line = d3.line()
     .x(d => xScale(d.x))
     .y(d => yScale(d.y))
     .curve(d3.curveBasis)
 
-  // Draw the preview curve with more points for smoothness
-  const path = g.append('path')
-    .datum(previewCurve.value)
+  // 生成曲线插值点
+  const curvePoints = []
+  for (let t = 0; t <= 1; t += 0.01) {
+    const point = interpolateCurve(controlPoints.value, t)
+    curvePoints.push(point)
+  }
+
+  // 绘制曲线
+  g.append('path')
+    .datum(curvePoints)
     .attr('class', 'curve')
     .attr('fill', 'none')
-    .attr('stroke', 'rgb(147, 51, 234)')
-    .attr('stroke-width', 2)
+    .attr('stroke', '#7C3AED')
+    .attr('stroke-width', 3)
     .attr('d', line)
 
-  // Add control points
-  const points = g.selectAll('circle')
+  // 添加右上角的控制按钮
+  const buttonGroup = svg.append('g')
+    .attr('class', 'control-buttons')
+    .attr('transform', `translate(${width - 65}, 15)`)
+
+  // 添加按钮
+  buttonGroup.append('circle')
+    .attr('cx', 15)
+    .attr('cy', 15)
+    .attr('r', 12)
+    .attr('fill', '#7C3AED')
+    .attr('cursor', 'pointer')
+    .on('click', addControlPoint)
+
+  buttonGroup.append('text')
+    .attr('x', 15)
+    .attr('y', 15)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', 'white')
+    .attr('font-size', '16px')
+    .attr('pointer-events', 'none')
+    .text('+')
+
+  buttonGroup.append('circle')
+    .attr('cx', 45)
+    .attr('cy', 15)
+    .attr('r', 12)
+    .attr('fill', '#7C3AED')
+    .attr('cursor', 'pointer')
+    .on('click', removeControlPoint)
+
+  buttonGroup.append('text')
+    .attr('x', 45)
+    .attr('y', 15)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', 'white')
+    .attr('font-size', '16px')
+    .attr('pointer-events', 'none')
+    .text('-')
+
+  // 绘制控制点
+  const pointsGroup = g.append('g')
+    .attr('class', 'control-points')
+
+  // 创建控制点拖动区域（较大区域提高易用性）
+  pointsGroup.selectAll('circle.point-target')
     .data(controlPoints.value)
     .enter()
     .append('circle')
+    .attr('class', 'point-target')
+    .attr('cx', d => xScale(d.x))
+    .attr('cy', d => yScale(d.y))
+    .attr('r', 15) // 增大拖动区域
+    .attr('fill', 'transparent')
+    .attr('cursor', d => d.fixed ? 'not-allowed' : 'grab')
+    .on('mousedown', function(event, d) {
+      if (d.fixed) return
+      
+      isDragging.value = true
+      activePointIndex.value = controlPoints.value.findIndex(p => p === d)
+      
+      d3.select(this.parentNode)
+        .selectAll('circle.point')
+        .filter((pd, i) => i === activePointIndex.value)
+        .attr('r', 8) // 增大激活点
+        .attr('stroke-width', 2.5)
+        
+      event.preventDefault()
+    })
+
+  // 绘制可见控制点
+  pointsGroup.selectAll('circle.point')
+    .data(controlPoints.value)
+    .enter()
+    .append('circle')
+    .attr('class', 'point')
     .attr('cx', d => xScale(d.x))
     .attr('cy', d => yScale(d.y))
     .attr('r', 6)
-    .attr('fill', 'white')
-    .attr('stroke', 'rgb(147, 51, 234)')
+    .attr('fill', d => d.fixed ? '#9CA3AF' : '#7C3AED')
+    .attr('stroke', '#FFFFFF')
     .attr('stroke-width', 2)
-    .call(d3.drag()
-      .on('drag', (event, d) => {
-        // Reduce sensitivity by applying a damping factor
-        const dampingFactor = 0.3 // Lower value = less sensitive
-        
-        // Calculate the damped movement
-        const rawX = xScale.invert(event.x)
-        const rawY = yScale.invert(event.y)
-        
-        // Get current position
-        const currentX = d.x
-        const currentY = d.y
-        
-        // Apply damping to movement
-        const dampedX = currentX + (rawX - currentX) * dampingFactor
-        const dampedY = currentY + (rawY - currentY) * dampingFactor
-        
-        // Clamp values to valid range
-        const x = Math.max(0, Math.min(1, dampedX))
-        const y = Math.max(0, Math.min(1, dampedY))
-        
-        // Only allow vertical movement for end points
-        if (d === controlPoints.value[0] || d === controlPoints.value[controlPoints.value.length - 1]) {
-          d.y = y
-        } else {
-          d.x = x
-          d.y = y
-        }
 
-        // Update visual elements
-        d3.select(event.sourceEvent. target)
-          .attr('cx', xScale(d.x))
-          .attr('cy', yScale(d.y))
-        
-        // Update the preview curve
-        path.datum(previewCurve.value)
-          .attr('d', line)
-
-        // Emit change event
-        emit('change', controlPoints.value)
-      }))
-
-  // Add axes
-  const xAxis = d3.axisBottom(xScale)
-    .ticks(5)
-    .tickFormat(d => (d * 100) + '%')
-
-  const yAxis = d3.axisLeft(yScale)
-    .ticks(5)
-    .tickFormat(d => (d * 100) + '%')
-
-  g.append('g')
-    .attr('transform', `translate(0,${height - margin.top - margin.bottom})`)
-    .call(xAxis)
-
-  g.append('g')
-    .call(yAxis)
-}
-
-// Preset curves
-const applyPreset = (preset) => {
-  switch (preset) {
-    case 'ease-in':
-      controlPoints.value = [
-        { x: 0, y: 0 },
-        { x: 0.4, y: 0.1 },
-        { x: 0.8, y: 0.6 },
-        { x: 1, y: 1 }
-      ]
-      break
-    case 'ease-out':
-      controlPoints.value = [
-        { x: 0, y: 0 },
-        { x: 0.2, y: 0.4 },
-        { x: 0.6, y: 0.9 },
-        { x: 1, y: 1 }
-      ]
-      break
-    case 'ease-in-out':
-      controlPoints.value = [
-        { x: 0, y: 0 },
-        { x: 0.2, y: 0.1 },
-        { x: 0.5, y: 0.5 },
-        { x: 0.8, y: 0.9 },
-        { x: 1, y: 1 }
-      ]
-      break
-    case 's-curve':
-      controlPoints.value = [
-        { x: 0, y: 0 },
-        { x: 0.3, y: 0.2 },
-        { x: 0.7, y: 0.8 },
-        { x: 1, y: 1 }
-      ]
-      break
-    case 'step':
-      controlPoints.value = [
-        { x: 0, y: 0 },
-        { x: 0.25, y: 0 },
-        { x: 0.25, y: 0.33 },
-        { x: 0.5, y: 0.33 },
-        { x: 0.5, y: 0.66 },
-        { x: 0.75, y: 0.66 },
-        { x: 0.75, y: 1 },
-        { x: 1, y: 1 }
-      ]
-      break
-  }
-  emit('change', controlPoints.value)
-}
-
-const resetToDefault = () => {
-  controlPoints.value = [
-    { x: 0, y: 0 },
-    { x: 0.5, y: 0.5 },
-    { x: 1, y: 1 }
-  ]
-  emit('change', controlPoints.value)
-}
-
-const addControlPoint = () => {
-  // Find a good position for the new point
-  const points = controlPoints.value
-  if (points.length >= 8) return // Limit to 8 points
+  // 添加拖动效果
+  svg.on('mousemove', function(event) {
+    if (!isDragging.value || activePointIndex.value === null) return
+    
+    const coords = d3.pointer(event)
+    const x = xScale.invert(coords[0] - margin.left)
+    const y = yScale.invert(coords[1] - margin.top)
+    
+    // 确保不会超出左右边界
+    const prevPoint = controlPoints.value[activePointIndex.value - 1]
+    const nextPoint = controlPoints.value[activePointIndex.value + 1]
+    
+    let newX = x
+    if (prevPoint && newX <= prevPoint.x) newX = prevPoint.x + 0.01
+    if (nextPoint && newX >= nextPoint.x) newX = nextPoint.x - 0.01
+    
+    // 限制 y 值在域范围内
+    const newY = Math.max(0, Math.min(yDomain[1], y))
+    
+    // 更新控制点位置
+    controlPoints.value[activePointIndex.value] = {
+      ...controlPoints.value[activePointIndex.value],
+      x: newX,
+      y: newY
+    }
+    
+    // 更新视图
+    initChart()
+    
+    // 触发变更事件
+    emit('change', [...controlPoints.value])
+  })
   
-  // Find the largest gap between points
-  let maxGap = 0
+  svg.on('mouseup', function() {
+    isDragging.value = false
+    activePointIndex.value = null
+    
+    // 恢复所有点大小
+    d3.select(this)
+      .selectAll('circle.point')
+      .attr('r', 6)
+      .attr('stroke-width', 2)
+  })
+  
+  svg.on('mouseleave', function() {
+    isDragging.value = false
+    activePointIndex.value = null
+    
+    // 恢复所有点大小
+    d3.select(this)
+      .selectAll('circle.point')
+      .attr('r', 6)
+      .attr('stroke-width', 2)
+  })
+  
+  // 添加拖动中的视觉指示
+  if (isDragging.value && activePointIndex.value !== null) {
+    const point = controlPoints.value[activePointIndex.value]
+    
+    g.append('circle')
+      .attr('class', 'drag-indicator')
+      .attr('cx', xScale(point.x))
+      .attr('cy', yScale(point.y))
+      .attr('r', 20)
+      .attr('fill', 'rgba(124, 58, 237, 0.1)')
+      .attr('stroke', '#7C3AED')
+      .attr('stroke-dasharray', '3,3')
+  }
+}
+
+// 曲线插值函数
+const interpolateCurve = (points, t) => {
+  let result = { x: 0, y: 0 }
+  
+  if (points.length === 1) {
+    return points[0]
+  }
+  
+  const newPoints = []
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i]
+    const p2 = points[i+1]
+    
+    newPoints.push({
+      x: p1.x + t * (p2.x - p1.x),
+      y: p1.y + t * (p2.y - p1.y)
+    })
+  }
+  
+  return interpolateCurve(newPoints, t)
+}
+
+// 添加控制点
+const addControlPoint = () => {
+  if (controlPoints.value.length >= 8) return
+  
+  // 寻找最大间隔
+  let maxDist = 0
   let insertIndex = 1
   
-  for (let i = 0; i < points.length - 1; i++) {
-    const gap = points[i+1].x - points[i].x
-    if (gap > maxGap) {
-      maxGap = gap
+  for (let i = 0; i < controlPoints.value.length - 1; i++) {
+    const dist = controlPoints.value[i+1].x - controlPoints.value[i].x
+    if (dist > maxDist) {
+      maxDist = dist
       insertIndex = i + 1
     }
   }
   
-  // Insert a new point in the middle of the largest gap
-  const newX = (points[insertIndex-1].x + points[insertIndex].x) / 2
-  const newY = (points[insertIndex-1].y + points[insertIndex].y) / 2
+  // 在最大间隔中间插入新点
+  const prev = controlPoints.value[insertIndex - 1]
+  const next = controlPoints.value[insertIndex]
   
-  points.splice(insertIndex, 0, { x: newX, y: newY })
-  emit('change', points)
-}
-
-// Handle resize with debouncing
-const handleResize = () => {
-  if (resizeTimeout) {
-    clearTimeout(resizeTimeout)
+  const newPoint = {
+    x: (prev.x + next.x) / 2,
+    y: (prev.y + next.y) / 2
   }
   
-  resizeTimeout = setTimeout(() => {
-    if (props.visible) {
-      initEditor()
+  controlPoints.value.splice(insertIndex, 0, newPoint)
+  initChart()
+  emit('change', [...controlPoints.value])
+}
+
+// 删除控制点
+const removeControlPoint = () => {
+  // 确保至少保留4个点（包括端点）
+  if (controlPoints.value.length <= 4) return
+  
+  // 寻找最小间隔（非固定点）
+  let minDist = Infinity
+  let removeIndex = null
+  
+  for (let i = 1; i < controlPoints.value.length - 2; i++) {
+    if (!controlPoints.value[i].fixed && !controlPoints.value[i+1].fixed) {
+      const dist = controlPoints.value[i+1].x - controlPoints.value[i].x
+      if (dist < minDist) {
+        minDist = dist
+        removeIndex = i
+      }
     }
-  }, 100)
+  }
+  
+  if (removeIndex !== null) {
+    controlPoints.value.splice(removeIndex, 1)
+    initChart()
+    emit('change', [...controlPoints.value])
+  }
 }
 
-onMounted(() => {
-  if (props.visible) {
-    initEditor()
+// 应用预设
+const applyPreset = (preset) => {
+  switch (preset) {
+    case 'ease-in':
+      controlPoints.value = [
+        { x: 0, y: 0, fixed: true },
+        { x: 0.4, y: 0.1 },
+        { x: 0.8, y: 0.6 },
+        { x: 1, y: 1, fixed: true }
+      ]
+      break
+    case 'ease-out':
+      controlPoints.value = [
+        { x: 0, y: 0, fixed: true },
+        { x: 0.2, y: 0.4 },
+        { x: 0.6, y: 0.9 },
+        { x: 1, y: 1, fixed: true }
+      ]
+      break
+    case 'ease-in-out':
+      controlPoints.value = [
+        { x: 0, y: 0, fixed: true },
+        { x: 0.3, y: 0.1 },
+        { x: 0.7, y: 0.9 },
+        { x: 1, y: 1, fixed: true }
+      ]
+      break
+    case 's-curve':
+      controlPoints.value = [
+        { x: 0, y: 0, fixed: true },
+        { x: 0.2, y: 0.8 },
+        { x: 0.8, y: 0.2 },
+        { x: 1, y: 1, fixed: true }
+      ]
+      break
+    case 'step':
+      // 改进阶梯形状，使其更像真正的阶梯
+      controlPoints.value = [
+        { x: 0, y: 0, fixed: true },
+        { x: 0.45, y: 0 },
+        { x: 0.45, y: 1 }, // 垂直线段第一点
+        { x: 0.55, y: 1 }, // 水平线段
+        { x: 0.55, y: 1 }, // 垂直线段第二点
+        { x: 1, y: 1, fixed: true }
+      ]
+      break
+    case 'enhance-2x':
+      controlPoints.value = [
+        { x: 0, y: 0, fixed: true },
+        { x: 0.3, y: 0.6 },
+        { x: 0.7, y: 1.4 },
+        { x: 1, y: 2, fixed: true }
+      ]
+      break
+    case 'enhance-1.5x':
+      controlPoints.value = [
+        { x: 0, y: 0, fixed: true },
+        { x: 0.3, y: 0.5 },
+        { x: 0.7, y: 1.0 },
+        { x: 1, y: 1.5, fixed: true }
+      ]
+      break
+    case 'reduce-0.5x':
+      controlPoints.value = [
+        { x: 0, y: 0, fixed: true },
+        { x: 0.3, y: 0.25 },
+        { x: 0.7, y: 0.4 },
+        { x: 1, y: 0.5, fixed: true }
+      ]
+      break
   }
   
-  // Set up resize observer with debouncing
-  resizeObserver = new ResizeObserver(handleResize)
-  
-  if (editorRef.value) {
-    resizeObserver.observe(editorRef.value)
-  }
-})
+  initChart()
+  emit('change', [...controlPoints.value])
+}
 
-onBeforeUnmount(() => {
-  if (resizeObserver) {
-    resizeObserver.disconnect()
-  }
-  if (resizeTimeout) {
-    clearTimeout(resizeTimeout)
-  }
-})
+// 重置到默认
+const resetToDefault = () => {
+  controlPoints.value = [
+    { x: 0, y: 0, fixed: true },
+    { x: 0.2, y: 0.2 },
+    { x: 0.8, y: 0.8 },
+    { x: 1, y: 1, fixed: true }
+  ]
+  
+  initChart()
+  emit('change', [...controlPoints.value])
+}
 
 watch(() => props.visible, (visible) => {
   if (visible) {
-    initEditor()
+    initChart()
   }
 })
 
-// Update the editor when control points change
-watch(() => controlPoints.value, () => {
+// 监听尺寸变化并重新渲染
+onMounted(() => {
   if (props.visible) {
-    initEditor()
+    initChart()
   }
-}, { deep: true })
+  
+  window.addEventListener('resize', initChart)
+})
 
-// Expose methods to parent
 defineExpose({
   applyPreset,
   resetToDefault
@@ -342,45 +488,52 @@ defineExpose({
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
+  <div class="curve-editor h-full flex flex-col">
     <div class="flex-1 overflow-hidden">
-      <div ref="editorRef" class="w-full h-full"></div>
-      
-      <div class="text-xs text-gray-500 mt-2">
-        <p>Drag control points to adjust the curve. End points can only move vertically.</p>
+      <svg ref="svgRef" class="w-full h-full"></svg>
+    </div>
+    <div class="flex-none mt-4">
+      <div class="flex flex-wrap gap-2 items-center">
+        <span class="text-sm text-gray-600">Extension Presets:</span>
+        <button 
+          v-for="preset in ['enhance-2x', 'enhance-1.5x', 'reduce-0.5x']"
+          :key="preset"
+          @click="applyPreset(preset)"
+          class="px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
+        >
+          {{ preset === 'enhance-2x' ? '200% Enhance' : 
+             preset === 'enhance-1.5x' ? '150% Enhance' : 
+             '50% Reduce' }}
+        </button>
       </div>
     </div>
-
-    <button 
-      @click="addControlPoint"
-      class="mt-4 w-full px-3 py-2 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100 border border-purple-200"
-    >
-      Add Control Point
-    </button>
   </div>
 </template>
 
 <style scoped>
-:deep(.grid line) {
-  stroke: #e5e7eb;
-  stroke-width: 0.5;
+.curve-editor {
+  position: relative;
 }
 
 :deep(.x-axis path),
 :deep(.y-axis path) {
-  stroke: none;
+  stroke: #E5E7EB;
 }
 
 :deep(.x-axis line),
 :deep(.y-axis line) {
-  stroke: #e5e7eb;
-  stroke-width: 1;
+  stroke: #E5E7EB;
 }
 
-:deep(.x-axis text),
-:deep(.y-axis text) {
-  font-family: 'Inter', sans-serif;
-  font-size: 10px;
-  fill: #6b7280;
+:deep(.control-points .point) {
+  transition: r 0.1s ease, stroke-width 0.1s ease;
+}
+
+:deep(.control-buttons) {
+  cursor: pointer;
+}
+
+:deep(.control-buttons circle:hover) {
+  filter: brightness(1.1);
 }
 </style>

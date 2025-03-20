@@ -266,12 +266,11 @@ const applyDecomposition = async () => {
     @mouseleave="handleMouseLeave"
   >
     <div class="flex items-center gap-2 mb-2">
-      <!-- 类型标签移到左上角 -->
-      <span v-if="series.type !== 'original'" :class="getTypeClass(series.type)" class="font-bold mr-2">
-        {{ series.type }}
+      <!-- 类型标签在左上角 -->
+      <span :class="getTypeClass(series.type)" class="font-bold ml-[60px]">
+        {{ series.type || 'original' }}
       </span>
-      
-      <span class="text-sm text-gray-700 font-medium flex-1">{{ series.id }}</span>
+      <span class="text-sm text-gray-500">{{ series.id }}</span>
       
       <button 
         @click.stop="deleteSeries"
@@ -303,9 +302,9 @@ const applyDecomposition = async () => {
     </div>
     
     <!-- 显示框中的控制按钮区域 -->
-    <div class="flex relative h-[120px]">
+    <div class="flex relative h-[90px]">
       <!-- 左侧控件空间 -->
-      <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-1">
+      <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-2">
         <!-- 可视标记按钮 -->
         <button 
           @click.stop="toggleVisibility" 
@@ -352,12 +351,12 @@ const applyDecomposition = async () => {
         </button>
       </div>
       
-      <!-- 图表容器，确保与下方时间轴对齐 - 向右拉伸 -->
+      <!-- 图表容器，确保与下方时间轴对齐 -->
       <div class="flex-1 relative pr-1">
         <!-- 始终显示曲线，不受可见性影响 -->
         <TimeSeriesChart
           :series="[{...series, visible: true}]"
-          :height="120"
+          :height="90"
           :showGrid="false"
           :isMainChart="false"
           :showTimeAxis="false"
@@ -441,8 +440,8 @@ const applyDecomposition = async () => {
           </div>
           
           <!-- 子曲线图表也与时间轴对齐 -->
-          <div class="flex relative h-[120px]">
-            <!-- 左侧控件空间 - 调整为水平排列 -->
+          <div class="flex relative h-[90px]">
+            <!-- 左侧控件空间 -->
             <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-2">
               <!-- 子曲线的可视标记按钮 -->
               <button 
@@ -464,12 +463,12 @@ const applyDecomposition = async () => {
               </button>
             </div>
             
-            <!-- 图表区域 - 向右拉伸 -->
+            <!-- 图表区域 -->
             <div class="flex-1 relative pr-0">
               <!-- 始终显示子曲线，不受可见性影响 -->
               <TimeSeriesChart
                 :series="[{...ds, visible: true}]"
-                :height="120"
+                :height="90"
                 :showGrid="false"
                 :isMainChart="false"
                 :showTimeAxis="false"
@@ -495,27 +494,28 @@ const applyDecomposition = async () => {
 }
 
 .time-series-tag.original {
-  background-color: #E5E7EB;
-  color: #4B5563;
+  background-color: #F3F3F3;
+  color: #B2B2B2;
 }
 
 .time-series-tag.lf {
-  background-color: #FEF3C7;
-  color: #92400E;
+  background-color: #F5F1FF;
+  color: #8367F8;
 }
 
 .time-series-tag.mf {
-  background-color: #FCE7F3;
-  color: #9D174D;
+  background-color: #F4ECFF;
+  color: #9B71F6;
 }
 
 .time-series-tag.hf {
-  background-color: #E0E7FF;
-  color: #3730A3;
+  background-color: #E9DFFF;
+  color: #6548C7;
 }
 
 .time-series-item {
   border-left: 12px solid transparent;
+  border-bottom: 1px solid #E5E7EB;
 }
 
 .time-series-item:hover {

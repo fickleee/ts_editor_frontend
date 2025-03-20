@@ -97,8 +97,21 @@ const initChart = () => {
     .domain([0, 24])
     .range([0, width])
 
+  // 计算所有可见序列的值范围
+  const visibleSeries = props.series.filter(s => s.visible)
+  const allValues = visibleSeries.flatMap(s => s.data.map(d => d.value))
+  const minValue = Math.min(...allValues)
+  const maxValue = Math.max(...allValues)
+  
+  // 添加一些边距，使图表不会太贴近边缘
+  const padding = (maxValue - minValue) * 0.1
+  const yDomain = [
+    Math.max(0, minValue - padding),  // 不允许小于0
+    maxValue + padding
+  ]
+
   const yScale = d3.scaleLinear()
-    .domain([0, 10])
+    .domain(yDomain)
     .range([height, 0])
 
   // Add background and grid for main chart
@@ -244,24 +257,36 @@ const initChart = () => {
   // Draw lines
   props.series.forEach((s, i) => {
     if (!s.visible) return
-
-    const color = colors[i % colors.length]
-    const isHovered = props.hoveredSeriesId === s.id
     
+    // 创建线条组
     const seriesGroup = g.append('g')
-      .attr('class', `series-group ${getSeriesSelector(s.id)}`)
-      .attr('data-series-id', s.id)
-
+      .attr('class', `series ${getSeriesSelector(s.id)}`)
+    
+    // 线条颜色逻辑更改
+    let seriesColor;
+    
+    if (props.isMainChart) {
+      // 主视图（edit视图）中的颜色逻辑
+      if (s.id === props.hoveredSeriesId) {
+        seriesColor = '#D4A554'; // 被选中状态的颜色
+      } else {
+        seriesColor = '#ABABAB'; // 默认颜色
+      }
+    } else {
+      // view视图中的颜色
+      seriesColor = '#000000'; // 黑色
+    }
+    
+    // 绘制线条
     seriesGroup.append('path')
       .datum(s.data)
       .attr('class', 'line')
       .attr('fill', 'none')
-      .attr('stroke', color)
-      .attr('stroke-width', props.isMainChart ? 
-        (isHovered ? 3 : 2) : 1.5)
+      .attr('stroke', seriesColor)
+      .attr('stroke-width', s.id === props.hoveredSeriesId ? 3 : 2)
       .attr('d', line)
-      .attr('data-series-id', s.id)
-      
+      .attr('clip-path', 'url(#clip)')
+    
     if (props.isMainChart) {
       seriesGroup.append('path')
         .datum(s.data)
@@ -278,7 +303,7 @@ const initChart = () => {
         })
     }
     
-    if (isHovered && props.isMainChart) {
+    if (s.id === props.hoveredSeriesId && props.isMainChart) {
       seriesGroup.raise()
     }
   })
@@ -443,15 +468,35 @@ const initChart = () => {
       .style('display', null)
   }
 
-  // Add y-axis for main chart
-  if (props.isMainChart) {
-    const yAxis = d3.axisLeft(yScale)
-      .ticks(5)
-      .tickFormat(d => d === 0 ? '' : d.toFixed(1))
+  // 更新网格线
+  if (props.showGrid) {
+    const yTicks = yScale.ticks(10)  // 让 D3 自动计算合适的刻度数量
+    
+    // 添加水平网格线
+    g.append('g')
+      .attr('class', 'grid')
+      .selectAll('line.horizontal')
+      .data(yTicks)
+      .enter()
+      .append('line')
+      .attr('class', 'horizontal')
+      .attr('x1', 0)
+      .attr('x2', width)
+      .attr('y1', d => yScale(d))
+      .attr('y2', d => yScale(d))
+      .attr('stroke', '#E5E7EB')
+      .attr('stroke-width', 0.5)
+      .attr('stroke-dasharray', '2,2')
+  }
 
+  // 更新 Y 轴
+  if (props.isMainChart) {
     g.append('g')
       .attr('class', 'y-axis')
-      .call(yAxis)
+      .call(d3.axisLeft(yScale)
+        .ticks(5)  // 减少刻度数量，避免拥挤
+        .tickFormat(d => d.toFixed(1))  // 格式化数值显示
+      )
       .selectAll('text')
       .style('font-size', '10px')
   }
@@ -522,6 +567,7 @@ watch(() => props.hoveredSeriesId, (newId) => {
     if (!seriesGroup.empty()) {
       seriesGroup.select('.line')
         .attr('stroke-width', isHovered ? 3 : 2)
+        .attr('stroke', isHovered ? '#D4A554' : '#ABABAB')  // 更新颜色
       
       if (isHovered) {
         seriesGroup.raise()
