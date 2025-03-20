@@ -1,5 +1,36 @@
 <template>
   <div ref="chartContainer" class="w-full h-full relative">
+    <!-- 范围选择滑块 -->
+    <div 
+      v-if="datasetStore.getCurrentDataset && data.length > 0 && !isLoading" 
+      class="absolute top-2 right-2 z-40 w-60 slider-container"
+    >
+      <div class="flex items-center">
+        <span 
+          class="text-sm mr-4 min-w-[30px] text-right font-semibold" 
+          :style="{ color: THEME_COLOR }"
+        >{{ valueRange[0] }}</span>
+        <el-slider 
+          v-model="valueRange" 
+          range 
+          :min="minValue" 
+          :max="maxValue" 
+          :step="0.1"
+          :disabled="isLoading"
+          @change="handleRangeChange"
+          class="compact-slider flex-1"
+          :style="{
+            '--el-slider-main-bg-color': THEME_COLOR,
+            '--el-color-primary': THEME_COLOR
+          }"
+        />
+        <span 
+          class="text-sm ml-4 min-w-[30px] text-left font-semibold"
+          :style="{ color: THEME_COLOR }"
+        >{{ valueRange[1] }}</span>
+      </div>
+    </div>
+    
     <!-- 加载动画 -->
     <div v-if="isLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
       <div class="flex flex-col items-center gap-2">
@@ -17,10 +48,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import * as d3 from 'd3';
 import { reqDataDay } from '@/api';
-import { GREEN_GRADIENT_COLORS, THEME_COLOR, THEME_COLOR_LIGHT, WEEKDAY_COLOR, WEEKEND_COLOR } from '@/utils/constants';
+import { THEME_COLOR, THEME_COLOR_LIGHT, WEEKDAY_COLOR, WEEKEND_COLOR } from '@/utils/constants';
 import { useDatasetStore } from '../stores/datasetStore';
 import { reqDataDayMultiple } from '../api';
 import { generateGradientColors } from '@/utils/generateColor';
@@ -31,6 +62,37 @@ const chartContainer = ref(null);
 const data = ref([]);
 const isLoading = ref(false);
 
+// 滑块相关状态
+const minValue = ref(0);
+const maxValue = ref(100);
+const valueRange = ref([0, 100]);
+const allValues = ref([]);
+
+// 处理滑块范围变化
+const handleRangeChange = () => {
+  if (data.value.length && chartContainer.value) {
+    // 在滑块值变化后更新图表
+    nextTick(() => {
+      createConcentricDonuts(data.value, chartContainer.value);
+    });
+  }
+};
+
+// 计算并更新滑块的范围值
+const updateSliderRange = () => {
+  if (data.value && data.value.length > 0) {
+    // 提取所有数据点的值
+    allValues.value = data.value.flatMap(user => user.res.map(item => item.value));
+    
+    // 计算最小值和最大值，精确到1位小数
+    minValue.value = Math.floor(Math.min(...allValues.value) * 10) / 10;
+    maxValue.value = Math.ceil(Math.max(...allValues.value) * 10) / 10;
+    
+    // 设置初始范围为全范围
+    valueRange.value = [minValue.value, maxValue.value];
+  }
+};
+
 // 创建同心环形图
 const createConcentricDonuts = (data, container) => {
   // 添加数据检查
@@ -38,9 +100,8 @@ const createConcentricDonuts = (data, container) => {
     console.warn('No data received');
     return;
   }
-
   // 清除已有的图表
-  d3.select(container).selectAll('*').remove();
+  d3.select(container).selectAll('svg').remove();
 
   const containerWidth = container.clientWidth;
   const containerHeight = container.clientHeight;
@@ -59,13 +120,10 @@ const createConcentricDonuts = (data, container) => {
     .attr('width', width)
     .attr('height', height)
     .attr('viewBox', [0, 0, width, height])
+    .style('position', 'absolute')
+    .style('z-index', '10')
     .append('g')
     .attr('transform', `translate(${width/2}, ${height/2})`);
-
-  // 计算所有数据的最大值和最小值
-  const allValues = data.flatMap(user => user.res.map(item => item.value));
-  const minValue = Math.min(...allValues);
-  const maxValue = Math.max(...allValues);
 
   // 根据工作日/周末状态选择合适的颜色
   let targetColor;
@@ -82,9 +140,9 @@ const createConcentricDonuts = (data, container) => {
   // 使用generateGradientColors生成渐变色数组
   const gradientColors = generateGradientColors(targetColor, 10); // 10个渐变层次
 
-  // 创建颜色比例尺
+  // 创建颜色比例尺 - 使用滑块的选择范围，而不是数据的最小最大值
   const colorScale = d3.scaleQuantize()
-    .domain([minValue, maxValue])
+    .domain([valueRange.value[0], valueRange.value[1]])
     .range(gradientColors);
 
   // 计算每个环的参数
@@ -107,22 +165,39 @@ const createConcentricDonuts = (data, container) => {
 
     const ring = svg.append('g')
       .attr('class', `ring-${user.id}`)
-      .attr('data-ring-index', index);  // 添加环的索引
+      .attr('data-ring-index', index)  // 添加环的索引
+      .attr('data-user-name', user.name || `User ${user.id}`); // 添加用户名称
 
     ring.selectAll('path')
       .data(pie(user.res))
       .enter()
       .append('path')
       .attr('d', arc)
-      .attr('fill', (d, i) => colorScale(user.res[i].value))
-      .style('opacity', 1)
+      .attr('fill', (d, i) => {
+        const value = user.res[i].value;
+        // 根据值与范围的关系确定颜色
+        if (value < valueRange.value[0]) {
+          // 小于范围下限，使用最低颜色
+          return gradientColors[0];
+        } else if (value > valueRange.value[1]) {
+          // 大于范围上限，使用最高颜色
+          return gradientColors[gradientColors.length - 1];
+        } else {
+          // 在范围内，使用比例尺正常映射
+          return colorScale(value);
+        }
+      })
+      .style('opacity', 1) // 所有数据点都完全不透明
       .attr('stroke', 'none')
       .attr('stroke-width', 1)
       .attr('data-index', (d, i) => i)
       .attr('data-ring-index', index)  // 添加环的索引到扇形
+      .attr('data-value', (d, i) => user.res[i].value) // 添加数值属性
       .on('mouseover', function(event, d) {
         const index = d3.select(this).attr('data-index');
         const ringIndex = d3.select(this).attr('data-ring-index');
+        const value = d3.select(this).attr('data-value');
+        const userName = d3.select(`.ring-${user.id}`).attr('data-user-name');
         
         // 高亮相同时刻的扇形
         svg.selectAll('path')
@@ -169,6 +244,9 @@ const fetchData = async () => {
       if (!datasetStore.getShowWeekday & datasetStore.getShowWeekend) dayType = 'weekend'
       data.value = await reqDataDay(datasetStore.getCurrentDataset, dayType);
     }
+    
+    // 更新滑块范围
+    updateSliderRange();
   } catch (error) {
     console.error('Error fetching data:', error);
   } finally {
@@ -203,6 +281,13 @@ watch(() => datasetStore.getCurrentDataset, async (newDataset) => {
     data.value = [];
   }
 }, { immediate: true });
+
+// 监听数据集变量变化
+watch(() => datasetStore.selectedVariable, async (newVariable) => {
+  if (datasetStore.getCurrentDataset === 'capture' && newVariable) {
+    await fetchData();
+  }
+});
 
 // 监听数据变化
 watch(data, async (newData) => {
@@ -239,6 +324,8 @@ watch([
 ], async () => {
   await fetchData();
 });
+
+
 </script>
 
 <style scoped>
@@ -252,5 +339,34 @@ watch([
 .tooltip {
   font-size: 12px;
   pointer-events: none;
+  max-width: 200px;
+  transition: opacity 0.2s;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* 滑块样式定制 */
+.slider-container :deep(.el-slider) {
+  height: 28px;
+}
+
+.slider-container :deep(.el-slider__runway) {
+  height: 5px;
+  margin: 14px 0;
+}
+
+.slider-container :deep(.el-slider__bar) {
+  height: 5px;
+}
+
+.slider-container :deep(.el-slider__button-wrapper) {
+  height: 22px;
+  width: 22px;
+  top: -9px;
+}
+
+.slider-container :deep(.el-slider__button) {
+  height: 14px;
+  width: 14px;
+  border-color: var(--el-color-primary);
 }
 </style> 

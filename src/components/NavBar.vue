@@ -126,20 +126,20 @@
       <button
         @click="datasetStore.setShowWeekday(!datasetStore.getShowWeekday)"
         :style="{
-          borderColor: datasetStore.getShowWeekday ? THEME_COLOR : '#E5E5E5',
-          color: datasetStore.getShowWeekday ? THEME_COLOR : '#E5E5E5'
+          borderColor: getWeekdayButtonColor(),
+          color: getWeekdayButtonColor()
         }"
-        class="px-4 py-2 rounded-full text-base font-semibold transition-all duration-200 border hover:opacity-90"
+        class="px-4 py-1.5 rounded-full text-base font-semibold transition-all duration-200 hover:opacity-90 border-2"
       >
         Weekday
       </button>
       <button
         @click="datasetStore.setShowWeekend(!datasetStore.getShowWeekend)"
         :style="{
-          borderColor: datasetStore.getShowWeekend ? THEME_COLOR : '#E5E5E5',
-          color: datasetStore.getShowWeekend ? THEME_COLOR : '#E5E5E5'
+          borderColor: getWeekendButtonColor(),
+          color: getWeekendButtonColor()
         }"
-        class="px-4 py-2 rounded-full text-base font-semibold transition-all duration-200 border hover:opacity-90"
+        class="px-4 py-1.5 rounded-full text-base font-semibold transition-all duration-200 hover:opacity-90 border-2"
       >
         Weekend
       </button>
@@ -181,7 +181,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import { BORDER_WIDTH, BORDER_COLOR, THEME_COLOR } from '../utils/constants';
+import { BORDER_WIDTH, BORDER_COLOR, THEME_COLOR, WEEKDAY_COLOR, WEEKEND_COLOR } from '../utils/constants';
 import { useDatasetStore } from '../stores/datasetStore';
 import { useTimeSeriesStore } from '../stores/timeSeriesStore';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -288,4 +288,32 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
 });
+
+// 工作日按钮颜色
+const getWeekdayButtonColor = () => {
+  if (datasetStore.getShowWeekday) {
+    // 如果只有工作日被选中，使用工作日颜色
+    if (!datasetStore.getShowWeekend) {
+      return WEEKDAY_COLOR;
+    }
+    // 如果工作日和周末都被选中，使用主题色
+    return THEME_COLOR;
+  }
+  // 未选中时使用灰色
+  return '#E5E5E5';
+};
+
+// 周末按钮颜色
+const getWeekendButtonColor = () => {
+  if (datasetStore.getShowWeekend) {
+    // 如果只有周末被选中，使用周末颜色
+    if (!datasetStore.getShowWeekday) {
+      return WEEKEND_COLOR;
+    }
+    // 如果工作日和周末都被选中，使用主题色
+    return THEME_COLOR;
+  }
+  // 未选中时使用灰色
+  return '#E5E5E5';
+};
 </script> 

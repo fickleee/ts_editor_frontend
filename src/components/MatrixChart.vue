@@ -322,13 +322,13 @@ const createOverviewChart = (data, container) => {
       .attr('fill', MATRIX_CHART.COLORS.BOX_PLOT)
       .attr('stroke', THEME_COLOR);
         // 绘制中位线
-    boxGroup.append('line')
-      .attr('x1', -boxWidth * 0.3)
-      .attr('x2', boxWidth * 0.3)
-      .attr('y1', yScale(median))
-      .attr('y2', yScale(median))
-      .attr('stroke', THEME_COLOR)
-      .attr('stroke-width', 2);
+    // boxGroup.append('line')
+    //   .attr('x1', -boxWidth * 0.3)
+    //   .attr('x2', boxWidth * 0.3)
+    //   .attr('y1', yScale(median))
+    //   .attr('y2', yScale(median))
+    //   .attr('stroke', THEME_COLOR)
+    //   .attr('stroke-width', 2);
     // 绘制上须线
     boxGroup.append('line')
       .attr('x1', 0)
