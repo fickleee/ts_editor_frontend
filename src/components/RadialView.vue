@@ -1,15 +1,37 @@
 <template>
   <div ref="chartContainer" class="w-full h-full relative">
+    <!-- 优化布局切换Tab -->
+    <div 
+      v-if="datasetStore.getCurrentDataset && data.length > 0 && !isLoading" 
+      class="absolute top-2 left-2 z-40"
+    >
+      <div class="flex bg-gray-100 p-0.5 rounded-full shadow-sm">
+        <button
+          v-for="option in layoutOptions"
+          :key="option.value"
+          @click="switchLayout(option.value)"
+          :style="{
+            '--text-color': THEME_COLOR
+          }"
+          class="px-2 py-1 text-xs font-semibold rounded-full transition-colors duration-200"
+          :class="[
+            useOptimizedLayout === option.value
+              ? 'bg-white text-[var(--text-color)] shadow-sm'
+              : 'text-gray-600 hover:text-[var(--text-color)]'
+          ]"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+    </div>
+    
     <!-- 范围选择滑块 -->
     <div 
       v-if="datasetStore.getCurrentDataset && data.length > 0 && !isLoading" 
-      class="absolute top-2 right-2 z-40 w-60 slider-container"
+      class="absolute top-2 right-2 z-40 slider-container"
+      :style="{ width: sliderWidth + 'px' }"
     >
       <div class="flex items-center">
-        <!-- <span 
-            class="text-sm min-w-[30px] text-right font-semibold" 
-            :style="{ color: THEME_COLOR }"
-          >range:</span> -->
         <span 
           class="text-sm mr-4 min-w-[20px] text-right font-semibold" 
           :style="{ color: THEME_COLOR }"
@@ -21,6 +43,7 @@
           :max="maxValue" 
           :step="sliderStep"
           :disabled="isLoading"
+          @input="handleRangeInput"
           @change="handleRangeChange"
           class="compact-slider flex-1"
           :style="{
@@ -29,7 +52,7 @@
           }"
         />
         <span 
-          class="text-sm ml-4 min-w-[30px] text-left font-semibold"
+          class="text-sm ml-4 min-w-[20px] text-left font-semibold"
           :style="{ color: THEME_COLOR }"
         >{{ valueRange[1] }}</span>
       </div>
@@ -59,6 +82,7 @@ import { THEME_COLOR, THEME_COLOR_LIGHT, WEEKDAY_COLOR, WEEKEND_COLOR } from '@/
 import { useDatasetStore } from '../stores/datasetStore';
 import { reqDataDayMultiple } from '../api';
 import { generateGradientColors } from '@/utils/generateColor';
+import { optimizeRadialLayout } from '@/utils/radialLayout'; // 引入优化布局函数
 
 const datasetStore = useDatasetStore();
 
@@ -66,27 +90,110 @@ const chartContainer = ref(null);
 const data = ref([]);
 const isLoading = ref(false);
 
+// 添加状态用于控制是否使用优化布局
+const useOptimizedLayout = ref(true);
+
 // 滑块相关状态
 const minValue = ref(0);
 const maxValue = ref(100);
 const valueRange = ref([0, 100]);
 const allValues = ref([]);
 
+// 动态计算滑块宽度
+const sliderWidth = ref(240); // 默认宽度
+
+// 根据容器宽度动态调整滑块宽度
+const updateSliderWidth = () => {
+  if (!chartContainer.value) return;
+  
+  const containerWidth = chartContainer.value.clientWidth;
+  
+  // 根据容器宽度动态调整
+  if (containerWidth < 600) {
+    sliderWidth.value = Math.max(containerWidth * 0.45, 150); // 小屏幕，最小宽度120px
+  } else if (containerWidth < 1200) {
+    sliderWidth.value = Math.max(containerWidth * 0.3, 180); // 中等屏幕
+  } else if (containerWidth < 1600) {
+    sliderWidth.value = Math.max(containerWidth * 0.25, 200); // 较大屏幕
+  } else {
+    sliderWidth.value = Math.max(containerWidth * 0.2, 240); // 大屏幕
+  }
+};
+
 // 在 script setup 部分添加 sliderStep 计算
 const sliderStep = computed(() => {
   if (!data.value || !data.value.length) return 0.1;
   const range = maxValue.value - minValue.value;
-  return range <= 20 ? 0.1 : 1;
+  // 确保小数位是一致的，避免因为精度问题导致的抖动
+  return range <= 20 ? 0.1 : 1.0;
 });
 
-// 处理滑块范围变化
+// 添加防抖函数
+const debounce = (fn, delay) => {
+  let timer = null;
+  return function(...args) {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      fn.apply(this, args);
+    }, delay);
+  };
+};
+
+// 防抖处理的滑块输入事件 - 实时更新颜色但不重绘图表
+const handleRangeInput = debounce((newRange) => {
+  if (!data.value.length || !chartContainer.value) return;
+  
+  // 只更新颜色而不重建整个图表
+  updatePathColors();
+}, 16); // 约60fps的更新率
+
+// 处理滑块范围变化（完成拖动后触发）
 const handleRangeChange = () => {
-  if (data.value.length && chartContainer.value) {
-    // 在滑块值变化后更新图表
-    nextTick(() => {
-      createConcentricDonuts(data.value, chartContainer.value);
-    });
+  if (!data.value.length || !chartContainer.value) return;
+  
+  // 范围最终确定后才重新渲染整个图表
+  createConcentricDonuts(data.value, chartContainer.value);
+};
+
+// 更新路径颜色的函数，避免重新渲染整个图表
+const updatePathColors = () => {
+  if (!chartContainer.value) return;
+  
+  const svg = d3.select(chartContainer.value).select('svg');
+  if (svg.empty()) return;
+  
+  // 获取当前选择的颜色
+  let targetColor;
+  if (datasetStore.getShowWeekday && datasetStore.getShowWeekend) {
+    targetColor = THEME_COLOR;
+  } else if (datasetStore.getShowWeekday) {
+    targetColor = WEEKDAY_COLOR;
+  } else if (datasetStore.getShowWeekend) {
+    targetColor = WEEKEND_COLOR;
+  } else {
+    targetColor = THEME_COLOR;
   }
+  
+  // 使用同样的渐变色生成逻辑
+  const gradientColors = generateGradientColors(targetColor, 10);
+  
+  // 创建颜色比例尺
+  const colorScale = d3.scaleQuantize()
+    .domain([valueRange.value[0], valueRange.value[1]])
+    .range(gradientColors);
+  
+  // 更新所有路径的颜色
+  svg.selectAll('path')
+    .attr('fill', function() {
+      const value = parseFloat(d3.select(this).attr('data-value'));
+      if (value < valueRange.value[0]) {
+        return gradientColors[0];
+      } else if (value > valueRange.value[1]) {
+        return gradientColors[gradientColors.length - 1];
+      } else {
+        return colorScale(value);
+      }
+    });
 };
 
 // 计算并更新滑块的范围值
@@ -95,9 +202,18 @@ const updateSliderRange = () => {
     // 提取所有数据点的值
     allValues.value = data.value.flatMap(user => user.res.map(item => item.value));
     
-    // 计算最小值和最大值，精确到1位小数
-    minValue.value = Math.floor(Math.min(...allValues.value) * 10) / 10;
-    maxValue.value = Math.ceil(Math.max(...allValues.value) * 10) / 10;
+    // 计算最小值和最大值
+    const min = Math.min(...allValues.value);
+    const max = Math.max(...allValues.value);
+    
+    // 判断插值是否大于20
+    if (max - min > 20) {
+      minValue.value = Math.floor(min);
+      maxValue.value = Math.ceil(max);
+    } else {
+      minValue.value = Math.floor(min * 10) / 10;
+      maxValue.value = Math.ceil(max * 10) / 10;
+    }
     
     // 设置初始范围为全范围
     valueRange.value = [minValue.value, maxValue.value];
@@ -105,12 +221,16 @@ const updateSliderRange = () => {
 };
 
 // 创建同心环形图
-const createConcentricDonuts = (data, container) => {
+const createConcentricDonuts = (rawData, container) => {
   // 添加数据检查
-  if (!data || !data.length) {
+  if (!rawData || !rawData.length) {
     console.warn('No data received');
     return;
   }
+  
+  // 使用优化布局算法重新排序数据
+  const processedData = useOptimizedLayout.value ? optimizeRadialLayout(rawData) : rawData;
+  
   // 清除已有的图表
   d3.select(container).selectAll('svg').remove();
 
@@ -158,10 +278,10 @@ const createConcentricDonuts = (data, container) => {
 
   // 计算每个环的参数
   const availableRadius = centerRadius - minRadius; // 可用半径空间
-  const ringWidth = availableRadius / data.length; // 每个环的宽度
+  const ringWidth = availableRadius / processedData.length; // 每个环的宽度
 
   // 为每个用户创建一个环
-  data.forEach((user, index) => {
+  processedData.forEach((user, index) => {
     const radius = minRadius + (index + 1) * ringWidth; // 从最小半径开始累加
 
     const arc = d3.arc()
@@ -274,6 +394,7 @@ const fetchData = async () => {
 
 // 监听容器大小变化
 const resizeObserver = new ResizeObserver(() => {
+  updateSliderWidth(); // 更新滑块宽度
   if (data.value.length && chartContainer.value) {
     createConcentricDonuts(data.value, chartContainer.value);
   }
@@ -281,14 +402,21 @@ const resizeObserver = new ResizeObserver(() => {
 
 onMounted(() => {
   if (chartContainer.value) {
+    updateSliderWidth(); // 初始化滑块宽度
     resizeObserver.observe(chartContainer.value);
   }
+  
+  // 监听窗口大小变化
+  window.addEventListener('resize', updateSliderWidth);
 });
 
 onUnmounted(() => {
   if (chartContainer.value) {
     resizeObserver.unobserve(chartContainer.value);
   }
+  
+  // 移除窗口大小变化监听
+  window.removeEventListener('resize', updateSliderWidth);
 });
 
 // 监听数据集变化
@@ -345,6 +473,29 @@ watch([
   await fetchData();
 });
 
+// 布局选项
+const layoutOptions = [
+  { label: 'Original', value: false },
+  { label: 'Optimized', value: true }
+];
+
+// 切换布局方法
+const switchLayout = (value) => {
+  useOptimizedLayout.value = value;
+  handleOptimizationToggle();
+};
+
+/**
+ * 处理优化布局切换
+ */
+function handleOptimizationToggle() {
+  // 当切换布局选项时，重新渲染视图
+  if (data.value && data.value.length && chartContainer.value) {
+    nextTick(() => {
+      createConcentricDonuts(data.value, chartContainer.value);
+    });
+  }
+}
 
 </script>
 
@@ -388,5 +539,18 @@ watch([
   height: 14px;
   width: 14px;
   border-color: var(--el-color-primary);
+}
+
+.control-panel {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 0 10px;
+}
+
+.optimization-toggle {
+  margin-left: 10px;
 }
 </style> 
