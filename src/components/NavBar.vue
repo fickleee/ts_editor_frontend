@@ -292,12 +292,7 @@ onUnmounted(() => {
 // 工作日按钮颜色
 const getWeekdayButtonColor = () => {
   if (datasetStore.getShowWeekday) {
-    // 如果只有工作日被选中，使用工作日颜色
-    if (!datasetStore.getShowWeekend) {
       return WEEKDAY_COLOR;
-    }
-    // 如果工作日和周末都被选中，使用主题色
-    return THEME_COLOR;
   }
   // 未选中时使用灰色
   return '#E5E5E5';
@@ -306,12 +301,7 @@ const getWeekdayButtonColor = () => {
 // 周末按钮颜色
 const getWeekendButtonColor = () => {
   if (datasetStore.getShowWeekend) {
-    // 如果只有周末被选中，使用周末颜色
-    if (!datasetStore.getShowWeekday) {
-      return WEEKEND_COLOR;
-    }
-    // 如果工作日和周末都被选中，使用主题色
-    return THEME_COLOR;
+    return WEEKEND_COLOR;
   }
   // 未选中时使用灰色
   return '#E5E5E5';

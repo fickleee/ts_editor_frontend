@@ -240,7 +240,7 @@ const createConcentricDonuts = (rawData, container) => {
   // 移除 margin，简化计算
   const width = containerWidth;
   const height = containerHeight;
-  const centerRadius = Math.min(width, height) * 9 / 20;
+  const centerRadius = Math.min(width, height) * 8 / 20; // 将9/20调整为8/20，缩小整体环形图半径
   
   // 设置最小起始半径
   const minRadius = centerRadius * 0.2; // 最小半径设为总半径的20%
@@ -280,12 +280,125 @@ const createConcentricDonuts = (rawData, container) => {
   const availableRadius = centerRadius - minRadius; // 可用半径空间
   const ringWidth = availableRadius / processedData.length; // 每个环的宽度
 
+  // 添加钟表式时间刻度 - 在绘制环形图之前绘制刻度
+  const timeAxesRadius = centerRadius + 10; // 从25调整为15，使时间刻度线更靠近环形图
+  const hoursPerDay = 24;
+  
+  // 创建一个组用于放置时间刻度
+  const timeAxesGroup = svg.append('g')
+    .attr('class', 'time-axes');
+    
+  // 添加一个圆环作为时间轴的背景
+  timeAxesGroup.append('circle')
+    .attr('cx', 0)
+    .attr('cy', 0)
+    .attr('r', centerRadius)
+    .attr('fill', 'none')
+    .attr('stroke', '#ccc')
+    .attr('stroke-width', 1)
+    .attr('stroke-dasharray', '3,3')
+    .attr('opacity', 0.5);
+
+  // 绘制时钟背景圆圈
+  svg.append('circle')
+    .attr('cx', 0)
+    .attr('cy', 0)
+    .attr('r', timeAxesRadius)
+    .attr('fill', 'none')
+    .attr('stroke', '#ddd')
+    .attr('stroke-width', 1)
+    .attr('stroke-dasharray', '3,3');
+
+  // 绘制时间刻度线和标签
+  for (let i = 0; i < hoursPerDay; i++) {
+    const angle = (i / hoursPerDay) * 2 * Math.PI - Math.PI / 2;
+    const isMainHour = i % 6 === 0; // 0, 6, 12, 18为主要小时
+    const isMediumHour = i % 3 === 0 && !isMainHour; // 3, 9, 15, 21为次要小时
+    const tickLength = isMainHour ? 10 : (isMediumHour ? 7 : 5);
+    const innerRadius = centerRadius + 2;
+    
+    // 绘制小时刻度线
+    timeAxesGroup.append('line')
+      .attr('x1', Math.cos(angle) * innerRadius)
+      .attr('y1', Math.sin(angle) * innerRadius)
+      .attr('x2', Math.cos(angle) * (innerRadius + tickLength))
+      .attr('y2', Math.sin(angle) * (innerRadius + tickLength))
+      .attr('stroke', isMainHour ? targetColor : (isMediumHour ? '#666' : '#aaa'))
+      .attr('stroke-width', isMainHour ? 2 : (isMediumHour ? 1.5 : 1));
+    
+    // 添加时间文本
+    const textRadius = timeAxesRadius + 5; // 从10调整为7，让文字更靠近刻度线
+    const textX = Math.cos(angle) * textRadius;
+    const textY = Math.sin(angle) * textRadius;
+    
+    // 根据角度调整文本对齐方式和位置
+    let textAnchor, textOffsetX = 0, textOffsetY = 0;
+
+    // 0点位置 (上方)
+    if (Math.abs(angle - (-Math.PI/2)) < 0.01) {
+      textAnchor = 'middle';
+      textOffsetY = -5;
+    } 
+    // 6点位置 (右侧)
+    else if (Math.abs(angle - 0) < 0.01) {
+      textAnchor = 'start';
+      textOffsetX = 0; // 进一步增加右侧文字的水平偏移
+    } 
+    // 12点位置 (下方)
+    else if (Math.abs(angle - (Math.PI/2)) < 0.01) {
+      textAnchor = 'middle';
+      textOffsetY = 6; // 进一步增加底部文字的垂直偏移
+    } 
+    // 18点位置 (左侧)
+    else if (Math.abs(angle - Math.PI) < 0.01) {
+      textAnchor = 'end';
+      textOffsetX = 2; // 进一步增加左侧文字的水平偏移
+    }
+    else {
+      if (angle > -Math.PI/4 && angle < Math.PI/4) textAnchor = 'start';
+      else if (angle > Math.PI/4 && angle < 3*Math.PI/4) textAnchor = 'start';
+      else if (angle > 3*Math.PI/4 || angle < -3*Math.PI/4) textAnchor = 'middle';
+      else textAnchor = 'end';
+    }
+
+    // 调整文本垂直对齐
+    const dy = '0.35em';
+    
+    // 绘制小时标签
+    if (isMainHour) { // 只有主要小时(0, 6, 12, 18)才显示时间文本
+      timeAxesGroup.append('text')
+        .attr('x', textX + textOffsetX)
+        .attr('y', textY + textOffsetY)
+        .attr('dy', dy)
+        .attr('text-anchor', textAnchor)
+        .attr('font-size', '11px')
+        .attr('font-weight', 'bold')
+        .attr('fill', targetColor)
+        .text(`${i}:00`);
+      
+    }
+    
+    // 添加分钟刻度
+    if (i < hoursPerDay - 1) { // 避免在23:00后添加
+      for (let m = 1; m < 4; m++) { // 每小时添加3个分钟刻度 (15, 30, 45分钟)
+        const minuteAngle = (i / hoursPerDay + m * 0.25 / hoursPerDay) * 2 * Math.PI - Math.PI / 2;
+        timeAxesGroup.append('line')
+          .attr('x1', Math.cos(minuteAngle) * innerRadius)
+          .attr('y1', Math.sin(minuteAngle) * innerRadius)
+          .attr('x2', Math.cos(minuteAngle) * (innerRadius + 3))
+          .attr('y2', Math.sin(minuteAngle) * (innerRadius + 3))
+          .attr('stroke', '#ccc')
+          .attr('stroke-width', 0.5);
+      }
+    }
+  }
+  
   // 为每个用户创建一个环
   processedData.forEach((user, index) => {
     const radius = minRadius + (index + 1) * ringWidth; // 从最小半径开始累加
 
     const arc = d3.arc()
-      .innerRadius(radius - ringWidth * 0.8)
+      .innerRadius(radius - ringWidth * 0.95) // 使用完整的ringWidth，完全消除环之间的间隙
       .outerRadius(radius)
       .padAngle(0); // 移除扇形之间的间隙
 

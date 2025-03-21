@@ -26,14 +26,14 @@ import RadialView from './components/RadialView.vue';
         </div>
         <div class="flex flex-1">
           <!-- 左右结构1:1 -->
-          <div class="w-[50%] bg-white" 
+          <div class="w-[55%] bg-white" 
               :style="{
                 borderRightWidth: `${BORDER_WIDTH}px`,
                 borderColor: BORDER_COLOR
               }">
             <RadialView />
           </div>
-          <div class="w-[50%] bg-white" 
+          <div class="w-[45%] bg-white" 
               :style="{
                 borderColor: BORDER_COLOR
               }">
