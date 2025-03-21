@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import * as d3 from 'd3'
 import { formatTime } from '../utils/csvUtils'
 
@@ -41,6 +41,10 @@ const props = defineProps({
   cloneHighlightArea: {
     type: Object,
     default: null
+  },
+  isSelected: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -262,19 +266,15 @@ const initChart = () => {
     const seriesGroup = g.append('g')
       .attr('class', `series ${getSeriesSelector(s.id)}`)
     
-    // 线条颜色逻辑更改
-    let seriesColor;
+    // 简化的颜色逻辑
+    let seriesColor = '#ABABAB'; // 默认灰色
     
-    if (props.isMainChart) {
-      // 主视图（edit视图）中的颜色逻辑
-      if (s.id === props.hoveredSeriesId) {
-        seriesColor = '#D4A554'; // 被选中状态的颜色
-      } else {
-        seriesColor = '#ABABAB'; // 默认颜色
-      }
-    } else {
-      // view视图中的颜色
-      seriesColor = '#000000'; // 黑色
+    // 如果是选中状态，显示金色
+    if (props.isSelected) {
+      seriesColor = '#D4A554'; // 金色
+    } else if (!props.isMainChart) {
+      // 非主视图且未选中时为黑色
+      seriesColor = '#000000';
     }
     
     // 绘制线条

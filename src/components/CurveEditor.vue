@@ -51,7 +51,7 @@ const initChart = () => {
   g.append('g')
     .attr('class', 'grid')
     .selectAll('line.horizontal')
-    .data(d3.range(0, 2.1, 0.25)) // 更多的网格线
+    .data(d3.range(0, 2.1, 0.5)) // 更稀疏的网格线
     .enter()
     .append('line')
     .attr('class', 'horizontal')
@@ -84,7 +84,7 @@ const initChart = () => {
     .attr('y', 15)
     .attr('text-anchor', 'start')
     .attr('fill', '#9CA3AF')
-    .attr('font-size', '12px')
+    .attr('font-size', '10px')
     .text('200% ↑')
 
   g.append('text')
@@ -92,7 +92,7 @@ const initChart = () => {
     .attr('y', innerHeight / 2)
     .attr('text-anchor', 'start')
     .attr('fill', '#9CA3AF')
-    .attr('font-size', '12px')
+    .attr('font-size', '10px')
     .text('100% →')
 
   g.append('text')
@@ -100,7 +100,7 @@ const initChart = () => {
     .attr('y', innerHeight - 5)
     .attr('text-anchor', 'start')
     .attr('fill', '#9CA3AF')
-    .attr('font-size', '12px')
+    .attr('font-size', '10px')
     .text('0% ↓')
 
   // 添加 x 轴
@@ -117,7 +117,7 @@ const initChart = () => {
   g.append('g')
     .attr('class', 'y-axis')
     .call(d3.axisLeft(yScale)
-      .ticks(8)
+      .ticks(5) // 减少标注数量
       .tickFormat(d => `${d * 100}%`))
     .selectAll('text')
     .style('font-size', '10px')
@@ -492,14 +492,13 @@ defineExpose({
     <div class="flex-1 overflow-hidden">
       <svg ref="svgRef" class="w-full h-full"></svg>
     </div>
-    <div class="flex-none mt-4">
+    <div class="flex-none mt-8 pt-2 border-t border-gray-200">
       <div class="flex flex-wrap gap-2 items-center">
-        <span class="text-sm text-gray-600">Extension Presets:</span>
         <button 
           v-for="preset in ['enhance-2x', 'enhance-1.5x', 'reduce-0.5x']"
           :key="preset"
           @click="applyPreset(preset)"
-          class="px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
+          class="px-3 py-1 text-xs bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
         >
           {{ preset === 'enhance-2x' ? '200% Enhance' : 
              preset === 'enhance-1.5x' ? '150% Enhance' : 

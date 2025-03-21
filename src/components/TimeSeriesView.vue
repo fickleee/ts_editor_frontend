@@ -4,7 +4,7 @@ import TimeSeriesChart from './TimeSeriesChart.vue'
 import { downloadCSV } from '../utils/csvUtils'
 import { api } from '../services/api'
 import { useTimeSeriesStore } from '../stores/timeSeriesStore'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElScrollbar, ElSlider } from 'element-plus'
 
 const props = defineProps({
   series: Object,
@@ -22,6 +22,8 @@ const model = ref('sym8')
 const level = ref(3)
 const isDecomposing = ref(false)
 const decomposedSeries = ref([])
+const isDecompNumberOpen = ref(false)
+const isModelOpen = ref(false)
 
 // 监听子曲线可见性，控制父曲线可见性
 watch(() => decomposedSeries.value, (newSeries) => {
@@ -302,7 +304,7 @@ const applyDecomposition = async () => {
     </div>
     
     <!-- 显示框中的控制按钮区域 -->
-    <div class="flex relative h-[90px]">
+    <div class="flex relative h-[70px]">
       <!-- 左侧控件空间 -->
       <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-2">
         <!-- 可视标记按钮 -->
@@ -352,16 +354,17 @@ const applyDecomposition = async () => {
       </div>
       
       <!-- 图表容器，确保与下方时间轴对齐 -->
-      <div class="flex-1 relative pr-1">
+      <div class="flex-1 relative pr-1" style="height: 70px">
         <!-- 始终显示曲线，不受可见性影响 -->
         <TimeSeriesChart
           :series="[{...series, visible: true}]"
-          :height="90"
+          :height="70"
           :showGrid="false"
           :isMainChart="false"
           :showTimeAxis="false"
           :hoverTime="hoverTime"
           :timeAxisConfig="timeAxisConfig"
+          :isSelected="isSelected"
         />
       </div>
       
@@ -369,63 +372,120 @@ const applyDecomposition = async () => {
     </div>
 
     <!-- 分解设置面板 -->
-    <div v-if="showDecomposition" class="mt-4 p-4 bg-gray-50 rounded-lg">
-      <div class="grid grid-cols-3 gap-4 mb-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            Decomposition number
-          </label>
-          <select
-            v-model="decompositionNumber"
-            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option :value="2">2 (High/Low)</option>
-            <option :value="3">3 (High/Mid/Low)</option>
-          </select>
+    <div v-if="showDecomposition" class="mt-4 p-2 bg-white rounded-lg" style="margin-left: 60px">
+      <div class="flex flex-wrap items-center gap-8 px-2 py-1">
+        <!-- 分解数量选择 -->
+        <div class="relative">
+          <div class="flex items-center gap-1">
+            <span class="text-sm font-semibold text-gray-600">Decomposition number:</span>
+            <button 
+              @click="isDecompNumberOpen = !isDecompNumberOpen"
+              style="color: #A15BFA; border-bottom: 2px solid #A15BFA; height: 26px; line-height: 26px;"
+              class="flex items-center justify-between min-w-[45px] hover:text-purple-600 transition-colors duration-200 ml-1"
+            >
+              <span class="text-sm font-semibold flex-1 text-center">{{ decompositionNumber }}</span>
+              <!-- 下拉箭头 -->
+              <svg 
+                class="h-4 w-4 transition-transform duration-200 flex-shrink-0 text-purple-600 ml-1"
+                :class="{ 'rotate-180': isDecompNumberOpen }"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </div>
+          <div v-if="isDecompNumberOpen" 
+            class="absolute top-full left-[175px] mt-1 w-[50px] bg-white rounded-lg shadow-lg py-1 z-20">
+            <button
+              v-for="num in [2, 3]"
+              :key="num"
+              @click="() => {
+                decompositionNumber = num;
+                isDecompNumberOpen = false;
+              }"
+              class="w-full px-3 py-1.5 text-center text-xs hover:text-purple-600 text-gray-700"
+            >
+              {{ num }}
+            </button>
+          </div>
         </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            Model
-          </label>
-          <select
-            v-model="model"
-            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="sym8">sym8</option>
-            <option value="db4">db4</option>
-          </select>
+        
+        <!-- 模型选择 -->
+        <div class="relative">
+          <div class="flex items-center gap-1">
+            <span class="text-sm font-semibold text-gray-600">Model:</span>
+            <button 
+              @click="isModelOpen = !isModelOpen"
+              style="color: #A15BFA; border-bottom: 2px solid #A15BFA; height: 26px; line-height: 26px;"
+              class="flex items-center justify-between min-w-[80px] hover:text-purple-600 transition-colors duration-200 ml-2"
+            >
+              <span class="text-sm font-semibold flex-1 text-center">{{ model }}</span>
+              <!-- 下拉箭头 -->
+              <svg 
+                class="h-4 w-4 transition-transform duration-200 flex-shrink-0 text-purple-600 ml-1"
+                :class="{ 'rotate-180': isModelOpen }"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+            </button>
+          </div>
+          <div v-if="isModelOpen" 
+            class="absolute top-full left-[52px] mt-1 w-[80px] bg-white rounded-lg shadow-lg py-1 z-20">
+            <button
+              v-for="option in ['sym8', 'db4']"
+              :key="option"
+              @click="() => {
+                model = option;
+                isModelOpen = false;
+              }"
+              class="w-full px-3 py-1.5 text-center text-xs hover:text-purple-600 text-gray-700"
+            >
+              {{ option }}
+            </button>
+          </div>
         </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            Level: {{ level }}
-          </label>
-          <input
-            v-model="level"
-            type="range"
-            min="3"
-            max="10"
-            class="w-full"
+        
+        <!-- 级别滑块 -->
+        <div class="flex items-center gap-1" style="width: 200px">
+          <span class="text-sm font-semibold text-gray-600 mr-2">level:</span>
+          <el-slider 
+            v-model="level" 
+            :min="3" 
+            :max="10" 
+            :step="1"
+            :disabled="isDecomposing"
+            class="compact-slider flex-1"
+            :style="{
+              '--el-slider-main-bg-color': '#A15BFA',
+              '--el-color-primary': '#A15BFA'
+            }"
           />
+          <span class="text-sm font-semibold text-purple-600 min-w-[20px] text-center ml-1">{{ level }}</span>
+        </div>
+        
+        <!-- 操作按钮 -->
+        <div class="flex items-center gap-2 ml-auto">
+          <button
+            @click="showDecomposition = false"
+            class="p-0.5 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-red-300"
+            title="Cancel"
+          >
+            <img src="/src/assets/cancel.svg" alt="Cancel" class="w-5 h-5" />
+          </button>
+          <button
+            @click="applyDecomposition"
+            class="p-0.5 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-green-300"
+            :disabled="isDecomposing"
+            title="Apply"
+          >
+            <img src="/src/assets/apply.svg" alt="Apply" class="w-5 h-5" />
+          </button>
         </div>
       </div>
-
-      <div class="flex justify-end gap-2">
-        <button
-          @click="showDecomposition = false"
-          class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-        >
-          Cancel
-        </button>
-        <button
-          @click="applyDecomposition"
-          class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-          :disabled="isDecomposing"
-        >
-          {{ isDecomposing ? 'Decomposing...' : 'Apply' }}
-        </button>
-      </div>
+      <div v-if="isDecomposing" class="text-xs text-purple-600 text-center mt-0.5">Processing...</div>
     </div>
 
     <!-- 分解的子曲线区域 -->
@@ -440,7 +500,7 @@ const applyDecomposition = async () => {
           </div>
           
           <!-- 子曲线图表也与时间轴对齐 -->
-          <div class="flex relative h-[90px]">
+          <div class="flex relative h-[70px]">
             <!-- 左侧控件空间 -->
             <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-2">
               <!-- 子曲线的可视标记按钮 -->
@@ -468,7 +528,7 @@ const applyDecomposition = async () => {
               <!-- 始终显示子曲线，不受可见性影响 -->
               <TimeSeriesChart
                 :series="[{...ds, visible: true}]"
-                :height="90"
+                :height="70"
                 :showGrid="false"
                 :isMainChart="false"
                 :showTimeAxis="false"
@@ -520,5 +580,55 @@ const applyDecomposition = async () => {
 
 .time-series-item:hover {
   background-color: #F9FAFB;
+}
+
+/* 添加滚动条样式 */
+:deep(.el-scrollbar__bar) {
+  opacity: 0.3;
+}
+
+:deep(.el-scrollbar__bar:hover) {
+  opacity: 0.5;
+}
+
+:deep(.el-scrollbar__wrap) {
+  overflow-x: hidden;
+}
+
+/* 修改滑块样式 */
+.compact-slider :deep(.el-slider__runway) {
+  height: 6px;
+  margin: 12px 0;
+  background-color: rgba(161, 91, 250, 0.1);
+  border-radius: 3px;
+}
+
+.compact-slider :deep(.el-slider__bar) {
+  height: 6px;
+  background-color: var(--el-slider-main-bg-color, #A15BFA);
+  border-radius: 3px;
+}
+
+.compact-slider :deep(.el-slider__button-wrapper) {
+  height: 20px;
+  width: 20px;
+  top: -8px;
+}
+
+.compact-slider :deep(.el-slider__button) {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--el-color-primary, #A15BFA);
+  background-color: white;
+}
+
+/* 添加下拉菜单的悬浮样式 */
+.compact-slider :deep(.el-slider__button):hover {
+  transform: scale(1.1);
+}
+
+/* 确保滑块在拖动时保持在顶部 */
+.compact-slider :deep(.el-slider__button-wrapper) {
+  z-index: 1;
 }
 </style>

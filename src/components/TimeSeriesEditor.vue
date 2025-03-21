@@ -52,6 +52,8 @@ const activeTool = ref(null)
 const isDragging = ref(false)
 const dragStartTime = ref(null)
 const dragStartValue = ref(null)
+const initialDragTime = ref(null)
+const dragThreshold = 0.05
 const isMultiSelect = ref(false)
 const selections = ref([])
 const dragStartPoint = ref(null)
@@ -60,6 +62,7 @@ const selectedPattern = ref(null)
 const selectedSeriesId = ref(null)
 const hoveredSeriesId = ref(null)
 const hoverTime = ref(null)
+const selectionPending = ref(false)
 
 const previewCurve = ref(null)
 
@@ -80,6 +83,11 @@ const handleChartHover = (time) => {
 }
 
 const selectTool = (toolId) => {
+  if (selectionPending.value) {
+    ElMessage.warning('Please confirm or cancel your selection first')
+    return
+  }
+
   if (toolId === activeTool.value) {
     if (toolId === 'expand' && selections.value.length > 0) {
       store.expandTimeSeries(selections.value)
@@ -128,10 +136,19 @@ const handleChartClick = (time, value) => {
     if (!dragStartTime.value) {
       dragStartTime.value = time
       dragStartValue.value = value
+      initialDragTime.value = time
     } else {
+      if (Math.abs(time - initialDragTime.value) < 0.01) {
+        return
+      }
+      
       const timeRange = {
         start: Math.min(dragStartTime.value, time),
         end: Math.max(dragStartTime.value, time)
+      }
+      
+      if (timeRange.end - timeRange.start < 0.1) {
+        timeRange.end = timeRange.start + 0.1
       }
       
       if (selectedSeriesId.value) {
@@ -142,6 +159,8 @@ const handleChartClick = (time, value) => {
       
       dragStartTime.value = null
       dragStartValue.value = null
+      initialDragTime.value = null
+      selectionPending.value = true
     }
     return
   }
@@ -176,10 +195,18 @@ const handleChartClick = (time, value) => {
 const handleChartDrag = (timeRange, valueRange, dragPoint) => {
   if (!isDragging.value) return
 
+  if (timeRange && Math.abs(timeRange.end - timeRange.start) < 0.1) {
+    timeRange.end = timeRange.start + 0.1
+  }
+
   switch (activeTool.value) {
     case 'move-x':
       if (store.selectedTimeRange) {
         const offset = dragPoint.x - (dragStartPoint.value?.x || 0)
+        
+        if (Math.abs(offset) < dragThreshold) {
+          return
+        }
         
         if (selectedSeriesId.value) {
           store.moveSeries(selectedSeriesId.value, { x: offset * 0.0005, y: 0 })
@@ -202,6 +229,10 @@ const handleChartDrag = (timeRange, valueRange, dragPoint) => {
       if (store.selectedTimeRange) {
         const offset = (dragStartPoint.value?.y || 0) - dragPoint.y
         
+        if (Math.abs(offset) < dragThreshold) {
+          return
+        }
+        
         if (selectedSeriesId.value) {
           store.moveSeries(selectedSeriesId.value, { x: 0, y: offset * 0.001 })
         } else {
@@ -213,11 +244,27 @@ const handleChartDrag = (timeRange, valueRange, dragPoint) => {
       break
     default:
       if (!isMultiSelect.value) {
+        if (timeRange) {
+          if (timeRange.end - timeRange.start < 0.1) {
+            return
+          }
+          
+          if (dragStartTime.value) {
+            const currentDirection = timeRange.end > timeRange.start ? 'forward' : 'backward'
+            const initialDirection = dragStartTime.value > initialDragTime.value ? 'forward' : 'backward'
+            
+            if (currentDirection !== initialDirection) {
+              return
+            }
+          }
+        }
+        
         if (selectedSeriesId.value) {
           store.setSelection(timeRange, [selectedSeriesId.value])
         } else {
           store.setSelection(timeRange, store.series.map(s => s.id))
         }
+        selectionPending.value = true
       }
       break
   }
@@ -275,11 +322,25 @@ const handleGenerateReset = () => {
 const handleDragStart = (point) => {
   isDragging.value = true
   dragStartPoint.value = point
+  
+  if (point && point.time) {
+    initialDragTime.value = point.time
+  }
 }
 
 const handleDragEnd = () => {
   isDragging.value = false
   dragStartPoint.value = null
+  
+  if (store.selectedTimeRange) {
+    const { start, end } = store.selectedTimeRange
+    if (Math.abs(end - start) < 0.1) {
+      store.setSelection({
+        start,
+        end: start + 0.1
+      }, store.selectedSeries)
+    }
+  }
 }
 
 const handleSeriesClick = (seriesId) => {
@@ -305,6 +366,30 @@ const formatTime = (time) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
 }
 
+const confirmSelection = () => {
+  selectionPending.value = false
+  
+  if (store.selectedTimeRange) {
+    const { start, end } = store.selectedTimeRange
+    if (Math.abs(end - start) < 0.1) {
+      store.setSelection({
+        start,
+        end: start + 0.1
+      }, store.selectedSeries)
+    }
+  }
+  
+  ElMessage.success('Selection confirmed')
+}
+
+const cancelSelection = () => {
+  selectionPending.value = false
+  store.clearSelection()
+  dragStartTime.value = null
+  dragStartValue.value = null
+  ElMessage.info('Selection cancelled')
+}
+
 onMounted(() => {
   store.initializeData()
 })
@@ -320,21 +405,29 @@ onMounted(() => {
              borderColor: BORDER_COLOR
            }">
         <!-- Toolbar -->
-        <div class="w-[65px] flex-none pt-10 flex flex-col items-center">
-          <div class="toolbar grid grid-cols-1 gap-8 mt-8">
-            <button
-              v-for="tool in tools"
-              :key="tool.id"
-              @click="selectTool(tool.id)"
-              class="w-[48px] h-[48px] flex items-center justify-center rounded-lg transition-all duration-200 shadow-sm"
-              :class="{
-                'bg-purple-100 text-purple-700 shadow-md scale-105': tool.active,
-                'text-gray-500 hover:bg-gray-50 hover:scale-105 hover:shadow': !tool.active
-              }"
-              :title="tool.name"
-            >
-              <img :src="`/src/assets/${tool.icon}`" :alt="tool.name" class="w-[36px] h-[36px]" />
-            </button>
+        <div class="w-[65px] flex-none flex flex-col items-center">
+          <div class="toolbar flex flex-col items-center gap-4 mt-4">
+            <!-- 循环生成按钮和分隔线 -->
+            <template v-for="(tool, index) in tools" :key="tool.id">
+              <button
+                @click="selectTool(tool.id)"
+                class="w-[48px] h-[48px] flex items-center justify-center rounded-lg transition-all duration-200 shadow-sm"
+                :class="{
+                  'bg-purple-100 text-purple-700 shadow-md scale-105': tool.active,
+                  'text-gray-500 hover:bg-gray-50 hover:scale-105 hover:shadow': !tool.active,
+                  'opacity-50 cursor-not-allowed': selectionPending
+                }"
+                :title="tool.name"
+                :disabled="selectionPending"
+              >
+                <img :src="`/src/assets/${tool.icon}`" :alt="tool.name" class="w-[36px] h-[36px]" />
+              </button>
+              
+              <!-- 只在第1个和第3个按钮后添加分隔线 -->
+              <div v-if="index === 1 || index === 3" 
+                   class="w-[24px] h-[1px] bg-gray-200 my-2">
+              </div>
+            </template>
           </div>
         </div>
 
@@ -363,6 +456,30 @@ onMounted(() => {
                 @seriesClick="handleSeriesClick"
                 @hover="handleChartHover"
               />
+            </div>
+            
+            <!-- 选择确认/取消按钮 -->
+            <div v-if="selectionPending && store.selectedTimeRange" 
+                class="absolute flex flex-col gap-2"
+                :style="{
+                  right: '5px',
+                  top: '50%',
+                  transform: 'translateY(-50%)'
+                }">
+              <button
+                @click="confirmSelection"
+                class="p-2 transition-all duration-150 hover:scale-110"
+                title="Confirm Selection"
+              >
+                <img src="/src/assets/apply.svg" alt="Apply" class="w-8 h-8" />
+              </button>
+              <button
+                @click="cancelSelection"
+                class="p-2 transition-all duration-150 hover:scale-110"
+                title="Cancel Selection"
+              >
+                <img src="/src/assets/cancel.svg" alt="Cancel" class="w-8 h-8" />
+              </button>
             </div>
           </div>
 
@@ -399,16 +516,18 @@ onMounted(() => {
                 <div class="mt-4 pt-4 border-t flex justify-end gap-2">
                   <button
                     @click="$refs.curveEditor.resetToDefault()"
-                    class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                    class="p-2 transition-all duration-150 hover:scale-110"
+                    title="Reset"
                   >
-                    Reset
+                    <img src="/src/assets/cancel.svg" alt="Reset" class="w-6 h-6" />
                   </button>
                   <button
                     @click="handleCurveApply"
-                    class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                    class="p-2 transition-all duration-150 hover:scale-110"
                     :disabled="!previewCurve"
+                    title="Apply"
                   >
-                    Apply
+                    <img src="/src/assets/apply.svg" alt="Apply" class="w-6 h-6" />
                   </button>
                 </div>
               </div>
@@ -526,7 +645,7 @@ onMounted(() => {
         </div>
 
         <!-- Scrollable series list -->
-        <div class="flex-1 overflow-y-auto pt-0">
+        <el-scrollbar class="flex-1 pt-0 pb-4">
           <TimeSeriesView
             v-for="s in store.series"
             :key="s.id"
@@ -537,7 +656,8 @@ onMounted(() => {
             @click="handleSeriesClick(s.id)"
             @hover="(isHovering) => handleSeriesHover(s.id, isHovering)"
           />
-        </div>
+          <div class="h-20"></div>
+        </el-scrollbar>
       </div>
     </div>
   </div>
@@ -546,6 +666,12 @@ onMounted(() => {
 <style scoped>
 [style*="border"] {
   border-style: solid;
+}
+
+.toolbar {
+  /* 调整工具栏布局 */
+  padding-top: 8px;  /* 减少顶部间距 */
+  justify-content: flex-start;
 }
 
 .toolbar button {
@@ -565,5 +691,14 @@ onMounted(() => {
   overflow: visible;
   margin-bottom: 0;
   margin-right: 20px;
+}
+
+/* 调整滚动区域样式 */
+:deep(.el-scrollbar__wrap) {
+  overflow-x: hidden !important;
+}
+
+:deep(.el-scrollbar__view) {
+  padding-bottom: 20px;
 }
 </style>
