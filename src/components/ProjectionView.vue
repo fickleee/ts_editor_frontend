@@ -211,6 +211,7 @@ const createScatterPlot = (data) => {
 
   // 提取所有点并按用户和日期组织数据
   const points = [];
+  const outlierPoints = []; // 存储离群点（cluster为-1的点）
   const trajectoryMap = new Map(); // 用于存储轨迹数据
   const clusterCenters = new Map(); // 存储所有簇的中心点
   const clusterCounts = new Map(); // 存储每个簇的点数量
@@ -252,7 +253,14 @@ const createScatterPlot = (data) => {
             timestamp: trajectory.timestamps[index],
             cluster: trajectory.clusters ? trajectory.clusters[index] : null
           };
-          points.push(pointData);
+          
+          // 将离群点(cluster为-1的点)单独存储
+          if (pointData.cluster === '-1' || pointData.cluster === -1) {
+            outlierPoints.push(pointData);
+          } else {
+            points.push(pointData);
+          }
+          
           trajectoryPoints.push(pointData);
         });
       }
@@ -260,11 +268,14 @@ const createScatterPlot = (data) => {
       // 处理簇中心点
       if (trajectory.cluster_centers) {
         Object.entries(trajectory.cluster_centers).forEach(([clusterId, center]) => {
-          clusterCenters.set(clusterId, {
-            x: center[0],
-            y: center[1],
-            clusterId: clusterId
-          });
+          // 不将-1视为簇中心
+          if (clusterId !== '-1') {
+            clusterCenters.set(clusterId, {
+              x: center[0],
+              y: center[1],
+              clusterId: clusterId
+            });
+          }
         });
       }
       
@@ -275,8 +286,9 @@ const createScatterPlot = (data) => {
   });
 
   // 计算x和y的范围 (使用所有点而不仅仅是簇中心点，以保持一致的视图)
-  const xExtent = d3.extent(points, d => d.x);
-  const yExtent = d3.extent(points, d => d.y);
+  const allPointsForExtent = [...points, ...outlierPoints];
+  const xExtent = d3.extent(allPointsForExtent, d => d.x);
+  const yExtent = d3.extent(allPointsForExtent, d => d.y);
 
   // 更新比例尺
   xScale.value = d3.scaleLinear()
@@ -294,7 +306,7 @@ const createScatterPlot = (data) => {
   const maxCount = Math.max(...clusterCounts.values());
   const sizeScale = d3.scaleSqrt()
     .domain([1, maxCount])
-    .range([3, 20]);
+    .range([5, 30]);
     
   // 创建线宽比例尺（基于转移次数）
   const maxTransitionCount = Math.max(...transitionCounts.values(), 1);
@@ -346,6 +358,20 @@ const createScatterPlot = (data) => {
     ctx.restore();
   };
 
+  // 定义绘制三角形的辅助函数
+  const drawTriangle = (x, y, size, fillStyle, t) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x - size * 0.866, y + size * 0.5);
+    ctx.lineTo(x + size * 0.866, y + size * 0.5);
+    ctx.closePath();
+    ctx.fillStyle = fillStyle;
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 0.5 * t.k;
+    ctx.stroke();
+  };
+
   // 基本绘制函数
   const draw = () => {
     // 清除画布
@@ -360,7 +386,7 @@ const createScatterPlot = (data) => {
     // 绘制簇中心点
     clusterCenters.forEach((center, clusterId) => {
       const count = clusterCounts.get(clusterId) || 1;
-      const radius = sizeScale(count) / t.k;
+      const radius = sizeScale(count) * t.k;
       
       ctx.beginPath();
       ctx.arc(xScale.value(center.x), yScale.value(center.y), radius, 0, 2 * Math.PI);
@@ -370,6 +396,15 @@ const createScatterPlot = (data) => {
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 1 / t.k;
       ctx.stroke();
+    });
+
+    // 绘制离群点（标记为-1的点）为三角形
+    outlierPoints.forEach(point => {
+      // 三角形大小随缩放变化
+      const size = 4 * t.k;
+      const x = xScale.value(point.x);
+      const y = yScale.value(point.y);
+      drawTriangle(x, y, size, colorScale.value(point.userId), t);
     });
 
     // 如果启用了转移线显示，绘制转移线
@@ -382,7 +417,7 @@ const createScatterPlot = (data) => {
         
         if (source && target) {
           // 计算线宽
-          const lineWidth = lineWidthScale(count) / t.k;
+          const lineWidth = lineWidthScale(count) * t.k;
           
           // 绘制从源到目标的箭头线
           const startX = xScale.value(source.x);
@@ -402,9 +437,9 @@ const createScatterPlot = (data) => {
           const unitX = dx / length;
           const unitY = dy / length;
           
-          // 计算源和目标簇的半径
-          const sourceRadius = sizeScale(clusterCounts.get(sourceId) || 1) / t.k;
-          const targetRadius = sizeScale(clusterCounts.get(targetId) || 1) / t.k;
+          // 计算源和目标簇的半径，考虑缩放因子
+          const sourceRadius = sizeScale(clusterCounts.get(sourceId) || 1) * t.k;
+          const targetRadius = sizeScale(clusterCounts.get(targetId) || 1) * t.k;
           
           // 调整起点和终点，使线条从簇边缘开始和结束
           const adjustedStartX = startX + unitX * sourceRadius;
@@ -421,24 +456,6 @@ const createScatterPlot = (data) => {
           ctx.strokeStyle = 'rgba(100, 100, 100, 0.6)';
           ctx.lineWidth = lineWidth;
           ctx.stroke();
-          
-          // 绘制箭头
-          const arrowSize = Math.min(8, lineWidth * 3) / t.k;
-          const angle = Math.atan2(dy, dx);
-          
-          ctx.beginPath();
-          ctx.moveTo(adjustedEndX, adjustedEndY);
-          ctx.lineTo(
-            adjustedEndX - arrowSize * Math.cos(angle - Math.PI / 6),
-            adjustedEndY - arrowSize * Math.sin(angle - Math.PI / 6)
-          );
-          ctx.lineTo(
-            adjustedEndX - arrowSize * Math.cos(angle + Math.PI / 6),
-            adjustedEndY - arrowSize * Math.sin(angle + Math.PI / 6)
-          );
-          ctx.closePath();
-          ctx.fillStyle = 'rgba(100, 100, 100, 0.8)';
-          ctx.fill();
         }
       });
     }
@@ -452,13 +469,10 @@ const createScatterPlot = (data) => {
             trajectory.points.forEach((point, index) => {
               if (trajectory.clusters[index] == selectedClusterId.value) {
                 ctx.beginPath();
-                ctx.arc(xScale.value(point[0]), yScale.value(point[1]), 2 / t.k, 0, 2 * Math.PI);
+                ctx.arc(xScale.value(point[0]), yScale.value(point[1]), 4 * t.k, 0, 2 * Math.PI);
                 ctx.fillStyle = colorScale.value(user.id);
-                ctx.globalAlpha = 0.8; // 增加透明度使点更明显
+                ctx.globalAlpha = 0.8;
                 ctx.fill();
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 0.5 / t.k;
-                ctx.stroke();
               }
             });
           }
@@ -528,13 +542,13 @@ const createScatterPlot = (data) => {
       ctx.scale(t.k, t.k);
       
       const count = clusterCounts.get(nearestCenter.clusterId) || 1;
-      const radius = sizeScale(count) / t.k;
+      const radius = sizeScale(count) * t.k;
       
       // 绘制高亮边框
       ctx.beginPath();
-      ctx.arc(xScale.value(nearestCenter.x), yScale.value(nearestCenter.y), radius + 2 / t.k, 0, 2 * Math.PI);
+      ctx.arc(xScale.value(nearestCenter.x), yScale.value(nearestCenter.y), radius + 2 * t.k, 0, 2 * Math.PI);
       ctx.strokeStyle = 'black';
-      ctx.lineWidth = 2 / t.k;
+      ctx.lineWidth = 2 * t.k;
       ctx.stroke();
       
       // 显示簇ID
@@ -551,11 +565,11 @@ const createScatterPlot = (data) => {
             trajectory.points.forEach((point, index) => {
               if (trajectory.clusters[index] == nearestCenter.clusterId) {
                 ctx.beginPath();
-                ctx.arc(xScale.value(point[0]), yScale.value(point[1]), 2 / t.k, 0, 2 * Math.PI);
+                ctx.arc(xScale.value(point[0]), yScale.value(point[1]), 4 * t.k, 0, 2 * Math.PI);
                 ctx.fillStyle = colorScale.value(user.id);
                 ctx.fill();
                 ctx.strokeStyle = 'white';
-                ctx.lineWidth = 0.5 / t.k;
+                ctx.lineWidth = 0.5 * t.k;
                 ctx.stroke();
               }
             });
