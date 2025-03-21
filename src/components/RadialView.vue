@@ -28,14 +28,17 @@
     <!-- 范围选择滑块 -->
     <div 
       v-if="datasetStore.getCurrentDataset && data.length > 0 && !isLoading" 
-      class="absolute top-2 right-2 z-40 slider-container"
+      class="absolute top-2 right-1 z-40 slider-container"
       :style="{ width: sliderWidth + 'px' }"
     >
-      <div class="flex items-center">
-        <span 
-          class="text-sm mr-4 min-w-[20px] text-right font-semibold" 
+      <div class="flex items-center justify-end">
+        <div 
+          class="text-sm mr-4 w-[80px] text-right font-semibold" 
           :style="{ color: THEME_COLOR }"
-        >range: {{ valueRange[0] }}</span>
+        >
+          <span>range: </span>
+          <span class="inline-block">{{ valueRange[0] }}</span>
+        </div>
         <el-slider 
           v-model="valueRange" 
           range 
@@ -51,10 +54,12 @@
             '--el-color-primary': THEME_COLOR
           }"
         />
-        <span 
-          class="text-sm ml-4 min-w-[20px] text-left font-semibold"
+        <div 
+          class="text-sm ml-4 w-[30px] text-left font-semibold"
           :style="{ color: THEME_COLOR }"
-        >{{ valueRange[1] }}</span>
+        >
+          <span class="inline-block">{{ valueRange[1] }}</span>
+        </div>
       </div>
     </div>
     
@@ -77,10 +82,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import * as d3 from 'd3';
-import { reqDataDay } from '@/api';
+import { reqDataDay, reqDataDayMultiple } from '@/api';
 import { THEME_COLOR, THEME_COLOR_LIGHT, WEEKDAY_COLOR, WEEKEND_COLOR } from '@/utils/constants';
 import { useDatasetStore } from '../stores/datasetStore';
-import { reqDataDayMultiple } from '../api';
 import { generateGradientColors } from '@/utils/generateColor';
 import { optimizeRadialLayout } from '@/utils/radialLayout'; // 引入优化布局函数
 
@@ -108,15 +112,15 @@ const updateSliderWidth = () => {
   
   const containerWidth = chartContainer.value.clientWidth;
   
-  // 根据容器宽度动态调整
+  // 根据容器宽度动态调整，增加各个尺寸下的宽度比例
   if (containerWidth < 600) {
-    sliderWidth.value = Math.max(containerWidth * 0.45, 150); // 小屏幕，最小宽度120px
+    sliderWidth.value = Math.max(containerWidth * 0.55, 180); // 小屏幕，增加比例和最小宽度
   } else if (containerWidth < 1200) {
-    sliderWidth.value = Math.max(containerWidth * 0.3, 180); // 中等屏幕
+    sliderWidth.value = Math.max(containerWidth * 0.4, 240); // 中等屏幕
   } else if (containerWidth < 1600) {
-    sliderWidth.value = Math.max(containerWidth * 0.25, 200); // 较大屏幕
+    sliderWidth.value = Math.max(containerWidth * 0.35, 300); // 较大屏幕
   } else {
-    sliderWidth.value = Math.max(containerWidth * 0.2, 240); // 大屏幕
+    sliderWidth.value = Math.max(containerWidth * 0.3, 360); // 大屏幕
   }
 };
 

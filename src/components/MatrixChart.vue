@@ -33,7 +33,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import * as d3 from 'd3';
-import { reqDataDay, reqDataOriginal, reqDataAllUserWeek, reqDataDayMultiple, reqDataOriginalMultiple } from '@/api';
+import { reqDataDay, reqDataOriginal, reqDataAllUserWeek, reqDataDayMultiple, reqDataOriginalMultiple, reqDataMix } from '@/api';
 import { useDatasetStore } from '../stores/datasetStore';
 import { ElMessage } from 'element-plus';
 import { MATRIX_CHART, THEME_COLOR, THEME_COLOR_LIGHT } from '@/utils/constants';
@@ -53,17 +53,6 @@ const userStripHeight = MATRIX_CHART.USER_STRIP_HEIGHT;
 
 // 修改 loading 状态管理
 const isLoading = ref(false);
-
-// 防抖函数
-const debounce = (fn, delay) => {
-  let timer = null;
-  return function(...args) {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      fn.apply(this, args);
-    }, delay);
-  };
-};
 
 // 创建概览图表 - 使用box plot展示所有用户和天数的数据分布
 const createOverviewChart = (data, container) => {
@@ -321,7 +310,8 @@ const createOverviewChart = (data, container) => {
       .attr('height', yScale(q1) - yScale(q3))
       .attr('fill', MATRIX_CHART.COLORS.BOX_PLOT)
       .attr('stroke', THEME_COLOR);
-        // 绘制中位线
+    
+      // 绘制中位线
     // boxGroup.append('line')
     //   .attr('x1', -boxWidth * 0.3)
     //   .attr('x2', boxWidth * 0.3)
@@ -329,6 +319,7 @@ const createOverviewChart = (data, container) => {
     //   .attr('y2', yScale(median))
     //   .attr('stroke', THEME_COLOR)
     //   .attr('stroke-width', 2);
+
     // 绘制上须线
     boxGroup.append('line')
       .attr('x1', 0)
@@ -965,14 +956,14 @@ const fetchData = async () => {
       originalData.value = originalRes;
     }
     else {
-      const [dayRes, weeklyRes, originalRes] = await Promise.all([
-        reqDataDay(datasetStore.getCurrentDataset),
-        reqDataAllUserWeek(datasetStore.getCurrentDataset),
-        reqDataOriginal(datasetStore.getCurrentDataset)
-      ]);
-      allUserData.value = dayRes;
-      allUserDataByWeek.value = weeklyRes;
-      originalData.value = originalRes;
+      // 使用统一的reqDataMix接口替代三个独立接口
+      const mixResult = await reqDataMix(datasetStore.getCurrentDataset);
+      
+      // 从混合结果中获取对应数据
+      allUserData.value = mixResult.preprocess;
+      allUserDataByWeek.value = mixResult.weekly;
+      originalData.value = mixResult.original;
+      
     }
 
     // 等待下一个渲染周期，确保 DOM 更新完成
@@ -1008,7 +999,6 @@ const resizeObserver = new ResizeObserver(() => {
 
 onMounted(() => {
   setTimeout(() => {
-    // fetchData();
     if (lineChart.value) {
       resizeObserver.observe(lineChart.value);
     }
@@ -1026,73 +1016,6 @@ onUnmounted(() => {
     resizeObserver.unobserve(overviewChart.value);
   }
 });
-
-// 监听数据变化（多余）
-// watch([allUserData, originalData], ([newUserData, newOriginalData]) => {
-//   if (newUserData.length && lineChart.value) {
-//     createLineChart(newUserData, lineChart.value, allUserDataByWeek.value);
-//   }
-//   if (newOriginalData.length && overviewChart.value) {
-//     createOverviewChart(newOriginalData, overviewChart.value);
-//   }
-// }, { deep: true });
-
-// 修改聚合级别变化的监听器(准备废除)
-// watch(() => datasetStore.aggregationLevel, async (newLevel) => {
-//   // 检查是否选择了数据集
-//   if (!datasetStore.getCurrentDataset) {
-//     return;
-//   }
-
-//   try {
-//     // 只设置用户图表的 loading，因为聚合级别变化不影响概览
-//     userChartLoading.value = true;
-
-//     // 根据聚合级别获取不同的数据
-//     if (newLevel === 'day') {
-//       if (datasetStore.getCurrentDataset === 'capture') {
-//         const [dayData, weeklyData] = await Promise.all([
-//           reqDataDayMultiple(datasetStore.getCurrentDataset, datasetStore.selectedVariable),
-//           null
-//         ]);
-//         allUserData.value = dayData;
-//         allUserDataByWeek.value = weeklyData;
-//       }
-//       else {
-//         const [dayData, weeklyData] = await Promise.all([
-//           reqDataDay(datasetStore.getCurrentDataset),
-//           reqDataAllUserWeek(datasetStore.getCurrentDataset)
-//         ]);
-//         allUserData.value = dayData;
-//         allUserDataByWeek.value = weeklyData;
-//       }
-      
-//       // 等待下一个渲染周期
-//       await nextTick();
-      
-//       // 更新图表
-//       if (lineChart.value) {
-//         createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
-//       }
-//     } else if (newLevel === 'week') {
-//       const weekData = await reqDataWeek(datasetStore.getCurrentDataset);
-//       allUserData.value = weekData;
-//       allUserDataByWeek.value = []; // 清空周数据
-      
-//       // 等待下一个渲染周期
-//       await nextTick();
-      
-//       // 更新图表
-//       if (lineChart.value) {
-//         createLineChart(allUserData.value, lineChart.value);
-//       }
-//     }
-//   } catch (error) {
-//     ElMessage.error('加载聚合数据失败');
-//   } finally {
-//     userChartLoading.value = false;
-//   }
-// }, { immediate: true });
 
 // 监听数据集变化
 watch(() => datasetStore.getCurrentDataset, (newDataset) => {
