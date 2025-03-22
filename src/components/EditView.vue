@@ -9,11 +9,6 @@ const isDragging = ref(false);
 const isDragOver = ref(false);
 
 const handleDragEnter = (e) => {
-  // 检查拖动的元素是否是异常点
-  if (!e.target.classList.contains('outlier-point')) {
-    return;
-  }
-  
   e.preventDefault();
   e.stopPropagation();
   
@@ -22,11 +17,6 @@ const handleDragEnter = (e) => {
 };
 
 const handleDragLeave = (e) => {
-  // 检查拖动的元素是否是异常点
-  if (!e.target.classList.contains('outlier-point')) {
-    return;
-  }
-  
   e.preventDefault();
   e.stopPropagation();
   
@@ -41,11 +31,6 @@ const handleDragLeave = (e) => {
 };
 
 const handleDragOver = (e) => {
-  // 检查拖动的元素是否是异常点
-  if (!e.target.classList.contains('outlier-point')) {
-    return;
-  }
-  
   e.preventDefault();
   e.stopPropagation();
   // 确保在拖拽过程中保持 isDragOver 为 true
@@ -55,11 +40,6 @@ const handleDragOver = (e) => {
 };
 
 const handleDrop = (e) => {
-  // 检查拖动的元素是否是异常点
-  if (!e.target.classList.contains('outlier-point')) {
-    return;
-  }
-  
   e.preventDefault();
   e.stopPropagation();
   isDragOver.value = false;
