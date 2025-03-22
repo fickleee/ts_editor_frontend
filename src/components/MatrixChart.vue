@@ -809,58 +809,6 @@ const createLineChart = (data, container, allUserDataByWeek) => {
       .attr('stroke', '#e5e7eb')
       .attr('stroke-width', 1);
 
-    // 绘制用户数据线（在上层）
-    userGroup.append('path')
-      .datum(user.res)
-      .attr('class', 'line')
-      .attr('d', line)
-      .attr('fill', 'none')
-      .attr('stroke', MATRIX_CHART.COLORS.MAIN_LINE)
-      .attr('stroke-width', MATRIX_CHART.LINE_STYLES.MAIN_LINE_WIDTH)
-      .attr('stroke-dasharray', MATRIX_CHART.LINE_STYLES.DASH_ARRAY)
-      .attr('stroke-opacity', MATRIX_CHART.OPACITY.AVERAGE_LINE);
-
-    // 如果聚合级别是day，绘制每周数据
-    if (datasetStore.aggregationLevel === 'day' && allUserDataByWeek) {
-      const userWeeklyData = allUserDataByWeek.find(u => u.id === user.id);
-      if (userWeeklyData && userWeeklyData.weekly_data) {
-        userWeeklyData.weekly_data.forEach((weekData, dayIndex) => {
-          if (weekData && weekData.res && Array.isArray(weekData.res) && weekData.res.length > 0) {
-            // 根据工作日/周末筛选状态决定是否显示该天的数据
-            const isWeekend = MATRIX_CHART.WEEKDAYS.WEEKEND_INDICES.includes(weekData.weekday);
-            if ((isWeekend && datasetStore.getShowWeekend) || (!isWeekend && datasetStore.getShowWeekday)) {
-              // 创建时间比例尺，确保不同采样频率的数据能够在时间上对齐
-              const weekDataLength = weekData.res.length;
-              const weekDataPoints = weekData.res.map((d, i) => ({
-                value: d.value,
-                timePosition: timeRange[1] * (i / (weekDataLength - 1))
-              }));
-              
-              // 使用时间位置而不是索引来绘制线条
-              const weekLine = d3.line()
-                .x(d => xScale(d.timePosition))
-                .y(d => yScale(d.value))
-                .curve(d3.curveMonotoneX);
-              
-              // 判断是工作日还是周末
-              const lineColor = isWeekend ? 
-                MATRIX_CHART.COLORS.WEEKEND_LINE : 
-                MATRIX_CHART.COLORS.WEEKDAY_LINE;
-              
-              userGroup.append('path')
-                .datum(weekDataPoints)
-                .attr('class', `week-line day-${weekData.weekday == 6 ? 0 : weekData.weekday + 1}`)
-                .attr('d', weekLine)
-                .attr('fill', 'none')
-                .attr('stroke', lineColor)
-                .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_WIDTH)
-                .attr('stroke-opacity', MATRIX_CHART.OPACITY.WEEK_LINE_NORMAL);
-            }
-          }
-        });
-      }
-    }
-
     // 添加X轴网格线
     const xTicks = 12; // 每两小时一条线
     for (let i = 0; i <= xTicks; i++) {
@@ -905,6 +853,120 @@ const createLineChart = (data, container, allUserDataByWeek) => {
       .attr('stroke-width', MATRIX_CHART.LINE_STYLES.AVERAGE_LINE_WIDTH)
       .attr('stroke-dasharray', '5,3')
       .attr('stroke-opacity', MATRIX_CHART.OPACITY.AVERAGE_LINE);
+
+    // 绘制用户数据线（在上层）
+    const mainLine = userGroup.append('path')
+      .datum(user.res)
+      .attr('class', 'line')
+      .attr('d', line)
+      .attr('fill', 'none')
+      .attr('stroke', MATRIX_CHART.COLORS.MAIN_LINE)
+      .attr('stroke-width', MATRIX_CHART.LINE_STYLES.MAIN_LINE_WIDTH)
+      .attr('stroke-dasharray', MATRIX_CHART.LINE_STYLES.DASH_ARRAY)
+      .attr('stroke-opacity', MATRIX_CHART.OPACITY.AVERAGE_LINE);
+    
+    // 添加一个透明的宽线区域用于捕获鼠标事件
+    userGroup.append('path')
+      .datum(user.res)
+      .attr('class', 'line-hover-area')
+      .attr('d', line)
+      .attr('fill', 'none')
+      .attr('stroke', 'transparent')
+      .attr('stroke-width', 20) // 更宽的区域便于鼠标交互
+      .style('cursor', 'pointer')
+      .on('mouseover', function() {
+        // 高亮主数据线
+        mainLine
+          .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_HIGHLIGHT_WIDTH)
+          .attr('stroke-opacity', 1)
+          .attr('filter', 'drop-shadow(0 0 2px rgba(0,0,0,0.3))');
+        
+        // 将当前用户组提升到顶层
+        userGroup.raise();
+      })
+      .on('mouseout', function() {
+        // 恢复主数据线样式
+        mainLine
+          .attr('stroke-width', MATRIX_CHART.LINE_STYLES.MAIN_LINE_WIDTH)
+          .attr('stroke-opacity', MATRIX_CHART.OPACITY.AVERAGE_LINE)
+          .attr('filter', null);
+      });
+
+    // 如果聚合级别是day，绘制每周数据
+    if (datasetStore.aggregationLevel === 'day' && allUserDataByWeek) {
+      const userWeeklyData = allUserDataByWeek.find(u => u.id === user.id);
+      if (userWeeklyData && userWeeklyData.weekly_data) {
+        userWeeklyData.weekly_data.forEach((weekData, dayIndex) => {
+          if (weekData && weekData.res && Array.isArray(weekData.res) && weekData.res.length > 0) {
+            // 根据工作日/周末筛选状态决定是否显示该天的数据
+            const isWeekend = MATRIX_CHART.WEEKDAYS.WEEKEND_INDICES.includes(weekData.weekday);
+            if ((isWeekend && datasetStore.getShowWeekend) || (!isWeekend && datasetStore.getShowWeekday)) {
+              // 创建时间比例尺，确保不同采样频率的数据能够在时间上对齐
+              const weekDataLength = weekData.res.length;
+              const weekDataPoints = weekData.res.map((d, i) => ({
+                value: d.value,
+                timePosition: timeRange[1] * (i / (weekDataLength - 1))
+              }));
+              
+              // 使用时间位置而不是索引来绘制线条
+              const weekLine = d3.line()
+                .x(d => xScale(d.timePosition))
+                .y(d => yScale(d.value))
+                .curve(d3.curveMonotoneX);
+              
+              // 判断是工作日还是周末
+              const lineColor = isWeekend ? 
+                MATRIX_CHART.COLORS.WEEKEND_LINE : 
+                MATRIX_CHART.COLORS.WEEKDAY_LINE;
+              
+              // 绘制周数据线
+              const weekPath = userGroup.append('path')
+                .datum(weekDataPoints)
+                .attr('class', `week-line day-${weekData.weekday == 6 ? 0 : weekData.weekday + 1}`)
+                .attr('d', weekLine)
+                .attr('fill', 'none')
+                .attr('stroke', lineColor)
+                .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_WIDTH)
+                .attr('stroke-opacity', MATRIX_CHART.OPACITY.WEEK_LINE_NORMAL);
+              
+              // 添加周数据线的hover效果
+              userGroup.append('path')
+                .datum(weekDataPoints)
+                .attr('class', `week-line-hover-area day-${weekData.weekday == 6 ? 0 : weekData.weekday + 1}`)
+                .attr('d', weekLine)
+                .attr('fill', 'none')
+                .attr('stroke', 'transparent')
+                .attr('stroke-width', 20) // 更宽的区域便于鼠标交互
+                .style('cursor', 'pointer')
+                .on('mouseover', function() {
+                  // 高亮当前周数据线
+                  weekPath
+                    .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_HIGHLIGHT_WIDTH)
+                    .attr('stroke-opacity', 1)
+                    .attr('filter', 'drop-shadow(0 0 2px rgba(0,0,0,0.3))');
+                  
+                  // 其他周数据线降低透明度
+                  userGroup.selectAll('.week-line')
+                    .filter(function() {
+                      return this !== weekPath.node();
+                    })
+                    .attr('stroke-opacity', MATRIX_CHART.OPACITY.WEEK_LINE_DIMMED);
+                  
+                  // 将当前用户组提升到顶层
+                  userGroup.raise();
+                })
+                .on('mouseout', function() {
+                  // 恢复所有周数据线样式
+                  userGroup.selectAll('.week-line')
+                    .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_WIDTH)
+                    .attr('stroke-opacity', MATRIX_CHART.OPACITY.WEEK_LINE_NORMAL)
+                    .attr('filter', null);
+                });
+            }
+          }
+        });
+      }
+    }
 
     // 添加用户标签
     userGroup.append('text')
