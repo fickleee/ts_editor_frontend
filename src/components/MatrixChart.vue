@@ -368,7 +368,100 @@ const createOverviewChart = (data, container) => {
             .attr('stroke', '#000')
             .attr('stroke-width', 0.3)
             .attr('class', `outlier-point user-${dataPoint.userId} weekday-${dataPoint.weekday}`)
-            .style('cursor', 'pointer')
+            .style('cursor', 'move')
+            .call(d3.drag()
+              .on('start', function(event, d) {
+                console.log('Drag Start:', d);
+                const editView = document.querySelector('.edit-view');
+                if (editView) {
+                  // 手动触发 dragenter 事件
+                  const dragEnterEvent = new DragEvent('dragenter', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: event.sourceEvent.clientX,
+                    clientY: event.sourceEvent.clientY
+                  });
+                  editView.dispatchEvent(dragEnterEvent);
+                }
+              })
+              .on('drag', function(event, d) {
+                const editView = document.querySelector('.edit-view');
+                if (editView) {
+                  const rect = editView.getBoundingClientRect();
+                  const isOverEditView = 
+                    event.sourceEvent.clientX >= rect.left && 
+                    event.sourceEvent.clientX <= rect.right && 
+                    event.sourceEvent.clientY >= rect.top && 
+                    event.sourceEvent.clientY <= rect.bottom;
+
+                  if (isOverEditView) {
+                    // 手动触发 dragover 事件
+                    const dragOverEvent = new DragEvent('dragover', {
+                      bubbles: true,
+                      cancelable: true,
+                      clientX: event.sourceEvent.clientX,
+                      clientY: event.sourceEvent.clientY
+                    });
+                    editView.dispatchEvent(dragOverEvent);
+                  } else {
+                    // 手动触发 dragleave 事件
+                    const dragLeaveEvent = new DragEvent('dragleave', {
+                      bubbles: true,
+                      cancelable: true,
+                      clientX: event.sourceEvent.clientX,
+                      clientY: event.sourceEvent.clientY
+                    });
+                    editView.dispatchEvent(dragLeaveEvent);
+                  }
+                }
+              })
+              .on('end', function(event, d) {
+                console.log('Drag End:', d);
+                const editView = document.querySelector('.edit-view');
+                
+                // 创建并触发全局 dragend 事件
+                const dragEndEvent = new DragEvent('dragend', {
+                  bubbles: true,
+                  cancelable: true,
+                  clientX: event.sourceEvent.clientX,
+                  clientY: event.sourceEvent.clientY
+                });
+                document.dispatchEvent(dragEndEvent);
+
+                if (editView) {
+                  const rect = editView.getBoundingClientRect();
+                  const isOverEditView = 
+                    event.sourceEvent.clientX >= rect.left && 
+                    event.sourceEvent.clientX <= rect.right && 
+                    event.sourceEvent.clientY >= rect.top && 
+                    event.sourceEvent.clientY <= rect.bottom;
+
+                  if (isOverEditView) {
+                    console.log('拖拽结束在 EditView 中，数据：', {
+                      userId: dataPoint.userId,
+                      weekday: dataPoint.weekday,
+                      weekdayName: dataPoint.weekdayName
+                    });
+                    
+                    // 将数据存储到全局变量
+                    window.__draggedData = {
+                      userId: dataPoint.userId,
+                      weekday: dataPoint.weekday,
+                      weekdayName: dataPoint.weekdayName
+                    };
+                    
+                    // 手动触发 drop 事件
+                    const dropEvent = new DragEvent('drop', {
+                      bubbles: true,
+                      cancelable: true,
+                      clientX: event.sourceEvent.clientX,
+                      clientY: event.sourceEvent.clientY
+                    });
+                    editView.dispatchEvent(dropEvent);
+                  }
+                }
+              })
+            )
             .on('mouseover', function() {
               // 放大异常点
               d3.select(this)
@@ -999,6 +1092,7 @@ const fetchData = async () => {
     // 清空现有数据
     allUserData.value = [];
     originalData.value = [];
+    datasetStore.setOriginalData([]); // 清空 store 中的数据
     return;
   }
 
@@ -1016,6 +1110,7 @@ const fetchData = async () => {
       allUserData.value = dayRes;
       allUserDataByWeek.value = weeklyRes;
       originalData.value = originalRes;
+      datasetStore.setOriginalData(originalRes); // 存储到 store
     }
     else {
       // 使用统一的reqDataMix接口替代三个独立接口
@@ -1025,7 +1120,7 @@ const fetchData = async () => {
       allUserData.value = mixResult.preprocess;
       allUserDataByWeek.value = mixResult.weekly;
       originalData.value = mixResult.original;
-      
+      datasetStore.setOriginalData(mixResult.original); // 存储到 store
     }
 
     // 等待下一个渲染周期，确保 DOM 更新完成
@@ -1067,6 +1162,11 @@ onMounted(() => {
     if (overviewChart.value) {
       resizeObserver.observe(overviewChart.value);
     }
+    
+    // // 添加拖拽事件监听器
+    // container.value?.addEventListener('outlier-drag-start', handleOutlierDragStart);
+    // container.value?.addEventListener('outlier-drag', handleOutlierDrag);
+    // container.value?.addEventListener('outlier-drag-end', handleOutlierDragEnd);
   }, 0);
 });
 
@@ -1077,6 +1177,11 @@ onUnmounted(() => {
   if (overviewChart.value) {
     resizeObserver.unobserve(overviewChart.value);
   }
+  
+  // // 移除事件监听器
+  // container.value?.removeEventListener('outlier-drag-start', handleOutlierDragStart);
+  // container.value?.removeEventListener('outlier-drag', handleOutlierDrag);
+  // container.value?.removeEventListener('outlier-drag-end', handleOutlierDragEnd);
 });
 
 // 监听数据集变化
@@ -1172,4 +1277,25 @@ watch(() => datasetStore.getSelectedUserId, (newUserId) => {
     }
   }
 }, { immediate: true });
+
+// // 修改事件处理函数
+// const handleOutlierDragEnd = (event) => {
+//   const { userId, weekday, weekdayName, droppedInEditView } = event.detail;
+//   console.log(`拖拽结束 - 用户ID: ${userId}, 工作日: ${weekdayName} (${weekday}), 放置在EditView中: ${droppedInEditView}`);
+  
+//   if (droppedInEditView) {
+//     console.log('成功放置到EditView中，可以进行后续处理');
+//     // 这里可以添加相应的处理逻辑
+//   }
+// };
+
+// const handleOutlierDragStart = (event) => {
+//   const { userId, weekday, weekdayName } = event.detail;
+//   console.log(`拖拽开始 - 用户ID: ${userId}, 工作日: ${weekdayName} (${weekday})`);
+// };
+
+// const handleOutlierDrag = (event) => {
+//   const { userId, weekday, weekdayName, isOverEditView } = event.detail;
+//   console.log(`拖拽中 - 用户ID: ${userId}, 工作日: ${weekdayName} (${weekday}), 在EditView上方: ${isOverEditView}`);
+// };
 </script>
