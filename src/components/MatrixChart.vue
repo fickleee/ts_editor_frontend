@@ -144,10 +144,20 @@ const createOverviewChart = (data, container) => {
         
         // 收集这个时间段的所有有效数据点
         const slotValues = [];
+        const slotAnnotations = new Set(); // 收集该时间段的所有 annotation
+        
         for (let i = startMinute; i < endMinute && i < user.data.length; i++) {
           const point = user.data[i];
           if (point && typeof point.value === 'number') {
             slotValues.push(point.value);
+            // 如果存在 annotation，添加到集合中
+            if (point.annotation) {
+              // 先对字符串进行处理，;拆分后再加入集合
+              const annotations = point.annotation.split(';');
+              annotations.forEach(anno => {
+                slotAnnotations.add(anno);
+              });
+            }
           }
         }
         
@@ -156,9 +166,16 @@ const createOverviewChart = (data, container) => {
           const avgValue = slotValues.reduce((sum, val) => sum + val, 0) / slotValues.length;
           // 将数据添加到对应工作日的数组中
           if (!weekdayData[weekday][slot]) {
-            weekdayData[weekday][slot] = [];
+            weekdayData[weekday][slot] = {
+              values: [],
+              annotations: new Set()
+            };
           }
-          weekdayData[weekday][slot].push(avgValue);
+          weekdayData[weekday][slot].values.push(avgValue);
+          // 合并 annotation
+          slotAnnotations.forEach(anno => {
+            weekdayData[weekday][slot].annotations.add(anno);
+          });
         }
       }
     }
@@ -166,17 +183,21 @@ const createOverviewChart = (data, container) => {
     // 计算每个工作日每个时间段的平均值
     for (let weekday = 0; weekday < 7; weekday++) {
       for (let slot = 0; slot < slotsPerDay; slot++) {
-        const values = weekdayData[weekday][slot];
-        if (values && values.length > 0) {
-          const weekdayAvg = values.reduce((sum, val) => sum + val, 0) / values.length;
+        const slotData = weekdayData[weekday][slot];
+        if (slotData && slotData.values.length > 0) {
+          const weekdayAvg = slotData.values.reduce((sum, val) => sum + val, 0) / slotData.values.length;
           // 保存到用户的周数据中
-          userWeekdayData[userId][weekday][slot] = weekdayAvg;
+          userWeekdayData[userId][weekday][slot] = {
+            value: weekdayAvg,
+            annotations: Array.from(slotData.annotations)
+          };
           // 添加到聚合数据中
           aggregatedData[slot].push({
             value: weekdayAvg,
             userId: userId,
             weekday: weekday,
-            weekdayName: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][weekday]
+            weekdayName: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][weekday],
+            annotations: Array.from(slotData.annotations)
           });
         }
       }
@@ -371,7 +392,6 @@ const createOverviewChart = (data, container) => {
             .style('cursor', 'move')
             .call(d3.drag()
               .on('start', function(event, d) {
-                console.log('Drag Start:', d);
                 const editView = document.querySelector('.edit-view');
                 if (editView) {
                   // 手动触发 dragenter 事件
@@ -416,7 +436,6 @@ const createOverviewChart = (data, container) => {
                 }
               })
               .on('end', function(event, d) {
-                console.log('Drag End:', d);
                 const editView = document.querySelector('.edit-view');
                 
                 // 创建并触发全局 dragend 事件
@@ -437,12 +456,6 @@ const createOverviewChart = (data, container) => {
                     event.sourceEvent.clientY <= rect.bottom;
 
                   if (isOverEditView) {
-                    console.log('拖拽结束在 EditView 中，数据：', {
-                      userId: dataPoint.userId,
-                      weekday: dataPoint.weekday,
-                      weekdayName: dataPoint.weekdayName
-                    });
-                    
                     // 将数据存储到全局变量
                     window.__draggedData = {
                       userId: dataPoint.userId,
@@ -477,7 +490,7 @@ const createOverviewChart = (data, container) => {
               // 创建折线图
               const detailLine = d3.line()
                 .x((d, i) => xScale(i))
-                .y(d => yScale(d))
+                .y(d => yScale(d.value))
                 .defined(d => d !== null)
                 .curve(d3.curveMonotoneX);
               
@@ -491,15 +504,18 @@ const createOverviewChart = (data, container) => {
                 .attr('stroke-width', 2)
                 .attr('stroke-opacity', 0.8);
               
-              // 添加数据点
-              detailGroup.selectAll('.detail-point')
+              // 添加数据点和注释
+              const points = detailGroup.selectAll('.detail-point-group')
                 .data(userData)
                 .enter()
                 .filter(d => d !== null)
-                .append('circle')
+                .append('g')
+                .attr('class', 'detail-point-group');
+
+              points.append('circle')
                 .attr('class', 'detail-point')
                 .attr('cx', (d, i) => xScale(i))
-                .attr('cy', d => yScale(d))
+                .attr('cy', d => yScale(d.value))
                 .attr('r', 2)
                 .attr('fill', colorScale(dataPoint.userId));
               
@@ -593,9 +609,15 @@ const createOverviewChart = (data, container) => {
               datasetStore.setSelectedView(null);
             });
           
-          // 添加鼠标悬停提示
+          // 修改鼠标悬停提示
           outlierGroup.append('title')
-            .text(`User: ${dataPoint.userId}\nWeekday: ${dataPoint.weekdayName}\nValue: ${dataPoint.value.toFixed(2)}`);
+            .text(d => {
+              let text = `User: ${dataPoint.userId}\nWeekday: ${dataPoint.weekdayName}\nValue: ${dataPoint.value.toFixed(2)}`;
+              if (dataPoint.annotations && dataPoint.annotations.length > 0) {
+                text += `\nAnnotations: ${dataPoint.annotations.join(', ')}`;
+              }
+              return text;
+            });
         }
       }
     });
