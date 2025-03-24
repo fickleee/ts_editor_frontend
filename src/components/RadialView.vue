@@ -86,7 +86,7 @@ import { reqDataDay, reqDataDayMultiple } from '@/api';
 import { THEME_COLOR, THEME_COLOR_LIGHT, WEEKDAY_COLOR, WEEKEND_COLOR } from '@/utils/constants';
 import { useDatasetStore } from '../stores/datasetStore';
 import { generateGradientColors } from '@/utils/generateColor';
-import { optimizeRadialLayout } from '@/utils/radialLayout'; // 引入优化布局函数
+import { optimizeRadialLayoutCorrect, optimizeRadialLayout } from '@/utils/radialLayout'; // 使用新的优化布局函数
 
 const datasetStore = useDatasetStore();
 
@@ -234,7 +234,8 @@ const createConcentricDonuts = (rawData, container) => {
   
   // 使用优化布局算法重新排序数据
   const processedData = useOptimizedLayout.value ? optimizeRadialLayout(rawData) : rawData;
-  
+  // // 使用新的优化布局算法重新排序数据
+  // const processedData = useOptimizedLayout.value ? optimizeRadialLayoutCorrect(rawData) : rawData;
   // 清除已有的图表
   d3.select(container).selectAll('svg').remove();
 
