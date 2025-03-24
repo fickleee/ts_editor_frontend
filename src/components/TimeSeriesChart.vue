@@ -12,6 +12,11 @@ const props = defineProps({
   activeTool: String,
   isMainChart: Boolean,
   hoveredSeriesId: String,
+  selectedSeriesId: String,
+  selectedSeries: {
+    type: Array,
+    default: () => []
+  },
   hoverTime: Number,
   isGeneratePreview: {
     type: Boolean,
@@ -60,7 +65,7 @@ const emit = defineEmits([
 
 const chartRef = ref()
 const svg = ref()
-const margin = { top: 20, right: 20, bottom: 0, left: 35 }
+const margin = { top: 20, right: 20, bottom: 0, left: 45 }
 const isDragging = ref(false)
 const dragStartX = ref(null)
 const dragStartY = ref(null)
@@ -70,6 +75,109 @@ const colors = ['#2563eb', '#dc2626', '#16a34a']
 
 const getSeriesSelector = (id) => {
   return `series-${id.replace(/[\s.]/g, '_')}`
+}
+
+const downsampleData = (data, threshold = 300) => {
+  if (!data || data.length <= threshold) return data;
+  
+  // 使用LTTB算法进行降采样，保留数据特征
+  const factor = Math.ceil(data.length / threshold);
+  const sampled = [];
+  
+  for (let i = 0; i < data.length; i += factor) {
+    // 在每个区间内找到最大和最小值点
+    let minValue = Infinity;
+    let maxValue = -Infinity;
+    let minIndex = i;
+    let maxIndex = i;
+    
+    for (let j = i; j < Math.min(i + factor, data.length); j++) {
+      if (data[j].value < minValue) {
+        minValue = data[j].value;
+        minIndex = j;
+      }
+      if (data[j].value > maxValue) {
+        maxValue = data[j].value;
+        maxIndex = j;
+      }
+    }
+    
+    // 按原始顺序添加极值点
+    if (minIndex <= maxIndex) {
+      sampled.push(data[minIndex]);
+      if (minIndex !== maxIndex) {
+        sampled.push(data[maxIndex]);
+      }
+    } else {
+      sampled.push(data[maxIndex]);
+      sampled.push(data[minIndex]);
+    }
+  }
+  
+  // 确保包含第一个和最后一个点
+  if (sampled[0] !== data[0]) sampled.unshift(data[0]);
+  if (sampled[sampled.length - 1] !== data[data.length - 1]) sampled.push(data[data.length - 1]);
+  
+  return sampled;
+};
+
+const processSeriesData = (series) => {
+  if (!series || !series.data || series.data.length === 0) {
+    return []
+  }
+  
+  // 复制数据进行处理
+  let seriesData = [...series.data]
+  
+  // 确保数据按时间排序
+  seriesData.sort((a, b) => a.time - b.time)
+  
+  // 检查是否有空隙需要填补
+  const result = []
+  const timeGapThreshold = 0.05 // 认为大于这个值的时间差需要插入过渡点
+  
+  // 为空数组或单个数据点的情况处理
+  if (seriesData.length <= 1) {
+    return seriesData
+  }
+  
+  // 检测并填补时间间隔
+  for (let i = 0; i < seriesData.length - 1; i++) {
+    const current = seriesData[i]
+    const next = seriesData[i + 1]
+    
+    // 确保数据点有效
+    if (!current || !next || typeof current.time !== 'number' || typeof next.time !== 'number') {
+      continue
+    }
+    
+    result.push(current)
+    const gap = next.time - current.time
+    
+    // 如果时间间隔过大，插入过渡点
+    if (gap > timeGapThreshold) {
+      // 根据间隔大小决定插入点的数量
+      const steps = Math.min(Math.ceil(gap / 0.01), 20) // 最多插入20个点，避免过多
+      
+      for (let j = 1; j < steps; j++) {
+        const ratio = j / steps
+        const interpolatedTime = current.time + gap * ratio
+        // 线性插值计算值
+        const interpolatedValue = current.value + (next.value - current.value) * ratio
+        
+        result.push({
+          time: interpolatedTime,
+          value: interpolatedValue
+        })
+      }
+    }
+  }
+  
+  // 添加最后一个点
+  result.push(seriesData[seriesData.length - 1])
+  
+  // 对于大数据集进行降采样
+  return result.length > 1000 ? downsampleData(result, 1000) : result
 }
 
 const initChart = () => {
@@ -101,21 +209,42 @@ const initChart = () => {
     .domain([0, 24])
     .range([0, width])
 
-  // 计算所有可见序列的值范围
-  const visibleSeries = props.series.filter(s => s.visible)
-  const allValues = visibleSeries.flatMap(s => s.data.map(d => d.value))
+  // 使用实际数据计算y轴范围
+  const allValues = []
+  props.series.forEach(s => {
+    if (s.visible && s.data && s.data.length > 0) {
+      s.data.forEach(d => {
+        if (d && typeof d.value === 'number' && !isNaN(d.value)) {
+          allValues.push(d.value)
+        }
+      })
+    }
+  })
+  
+  // 确保有数据
+  if (allValues.length === 0) {
+    allValues.push(0)
+  }
+  
+  // 计算数据范围并添加一些边距
   const minValue = Math.min(...allValues)
   const maxValue = Math.max(...allValues)
   
-  // 添加一些边距，使图表不会太贴近边缘
-  const padding = (maxValue - minValue) * 0.1
-  const yDomain = [
-    Math.max(0, minValue - padding),  // 不允许小于0
-    maxValue + padding
-  ]
+  // 计算合适的上下边界，确保负值正确显示
+  const valueRange = maxValue - minValue
+  const padding = Math.max(valueRange * 0.1, 1) // 至少1的边距或10%的数据范围
+  
+  let yMin = minValue - padding
+  let yMax = maxValue + padding
+  
+  // 如果最小值和最大值都是0，提供默认范围
+  if (yMin === yMax) {
+    yMin = -1
+    yMax = 1
+  }
 
   const yScale = d3.scaleLinear()
-    .domain(yDomain)
+    .domain([yMin, yMax])
     .range([height, 0])
 
   // Add background and grid for main chart
@@ -164,9 +293,11 @@ const initChart = () => {
       .attr('stroke', '#f3f4f6')
       .attr('stroke-width', 0.5)
 
-    // Major horizontal grid lines (every 1.0)
+    // Major horizontal grid lines (dynamically spaced)
+    const majorTickCount = 5;
+    const majorTicks = yScale.ticks(majorTickCount);
     g.selectAll('line.horizontal-grid-major')
-      .data(d3.range(0, 11, 1))
+      .data(majorTicks)
       .enter()
       .append('line')
       .attr('class', 'horizontal-grid-major')
@@ -177,9 +308,12 @@ const initChart = () => {
       .attr('stroke', '#e5e7eb')
       .attr('stroke-width', 1)
 
-    // Minor horizontal grid lines (every 0.5)
+    // Minor horizontal grid lines (finer granularity)
+    const minorTickCount = majorTickCount * 2;
+    const minorTicks = yScale.ticks(minorTickCount)
+      .filter(d => !majorTicks.includes(d));
     g.selectAll('line.horizontal-grid-minor')
-      .data(d3.range(0.5, 10.5, 1))
+      .data(minorTicks)
       .enter()
       .append('line')
       .attr('class', 'horizontal-grid-minor')
@@ -279,7 +413,7 @@ const initChart = () => {
     
     // 绘制线条
     seriesGroup.append('path')
-      .datum(s.data)
+      .datum(processSeriesData(s))
       .attr('class', 'line')
       .attr('fill', 'none')
       .attr('stroke', seriesColor)
@@ -289,7 +423,7 @@ const initChart = () => {
     
     if (props.isMainChart) {
       seriesGroup.append('path')
-        .datum(s.data)
+        .datum(processSeriesData(s))
         .attr('class', 'line-hover-area')
         .attr('fill', 'none')
         .attr('stroke', 'transparent')
@@ -456,7 +590,7 @@ const initChart = () => {
       dragStartX.value = null
       dragStartY.value = null
       isDragging.value = false
-      emit('dragEnd')
+      emit('dragEnd', event)
     })
 
   // Update hover line position if hoverTime prop is provided
@@ -493,12 +627,20 @@ const initChart = () => {
   if (props.isMainChart) {
     g.append('g')
       .attr('class', 'y-axis')
+      .attr('transform', `translate(0,0)`)
       .call(d3.axisLeft(yScale)
-        .ticks(5)  // 减少刻度数量，避免拥挤
-        .tickFormat(d => d.toFixed(1))  // 格式化数值显示
+        .ticks(5)
+        .tickFormat(d => d.toFixed(1))
       )
       .selectAll('text')
       .style('font-size', '10px')
+      .style('fill', '#666')
+      .attr('dx', '0')
+      .attr('dy', '0.3em');
+      
+    g.select('.y-axis').select('path.domain')
+      .style('stroke', '#aaa')
+      .style('stroke-width', '1px');
   }
 
   // 绘制克隆高亮区域（如果有）
@@ -524,10 +666,29 @@ const initChart = () => {
         .duration(200)
         .style('opacity', 0.8)
         .transition()
-        .delay(800)
+        .delay(2000) // 延长高亮时间到2秒
         .duration(200)
         .style('opacity', 0)
     }
+  }
+
+  // 为多序列编辑添加高亮效果
+  if (props.multiSelect && props.selection && props.isMainChart && props.selectedSeries && props.selectedSeries.length > 1) {
+    const { start, end } = props.selection
+    
+    // 创建多序列高亮矩形
+    g.append('rect')
+      .attr('class', 'multi-series-highlight')
+      .attr('x', xScale(start))
+      .attr('y', 0)
+      .attr('width', xScale(end) - xScale(start))
+      .attr('height', height)
+      .attr('fill', 'rgba(124, 58, 237, 0.1)') // 更淡的紫色
+      .attr('stroke', '#7C3AED')  // 紫色边框
+      .attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', '4,4') // 虚线边框
+      .attr('rx', 4) // 圆角
+      .style('pointer-events', 'none') // 确保不会阻挡鼠标事件
   }
 }
 

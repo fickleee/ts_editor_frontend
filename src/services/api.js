@@ -1,20 +1,36 @@
 import axios from 'axios'
 
-const API_URL = 'http://localhost:1022/api'
+// Create axios instance with base URL
+const instance = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:1022/api',
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
 
 export const api = {
-  async importData(date) {
-    const response = await axios.get(`${API_URL}/data/import`, {
-      params: { date }
+  get: (url, params) => instance.get(url, { params }),
+  post: (url, data) => instance.post(url, data),
+  put: (url, data) => instance.put(url, data),
+  delete: (url) => instance.delete(url),
+  
+  // Add decomposition-specific method
+  decomposeSeries: (values, options) => {
+    return instance.post('/decompose', {
+      values: values.map(point => point.value),
+      decomp_number: options.decompositionNumber || 2,
+      model: options.model ,
+      level: options.level ,
+      method: options.method 
     })
-    return response.data
-  },
-
-  async decomposeSeries(data, options) {
-    const response = await axios.post(`${API_URL}/decompose`, {
-      data,
-      options
-    })
-    return response.data
+    .catch(error => {
+      console.error('分解请求出错:', error);
+      // 返回一个已解决的promise，防止未捕获的错误
+      return Promise.resolve({
+        data: null,
+        error: error.message || '分解处理失败'
+      });
+    });
   }
 }

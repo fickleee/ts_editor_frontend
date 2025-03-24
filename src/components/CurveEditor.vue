@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import * as d3 from 'd3'
 
 const props = defineProps({
@@ -8,14 +8,14 @@ const props = defineProps({
   seriesId: String
 })
 
-const emit = defineEmits(['change'])
+const emit = defineEmits(['change', 'cancel'])
 
 const svgRef = ref(null)
 const controlPoints = ref([
-  { x: 0, y: 0, fixed: true },
-  { x: 0.2, y: 0.2 },
-  { x: 0.8, y: 0.8 },
-  { x: 1, y: 1, fixed: true }
+  { x: 0, y: 1 },
+  { x: 0.33, y: 1 },
+  { x: 0.67, y: 1 },
+  { x: 1, y: 1 }
 ])
 const isDragging = ref(false)
 const activePointIndex = ref(null)
@@ -24,6 +24,152 @@ const margin = { top: 20, right: 30, bottom: 30, left: 40 }
 
 // 修改为扩展范围到 200%
 const yDomain = [0, 2] // 扩展到 200%
+
+// 事件处理
+const handleMouseDown = (event, d, index) => {
+  console.log('开始拖动控制点:', index, d);
+  isDragging.value = true;
+  activePointIndex.value = index;
+  
+  // 阻止事件冒泡和默认行为
+  event.stopPropagation();
+  event.preventDefault();
+};
+
+// 鼠标移动事件
+const handleMouseMove = (event) => {
+  if (!isDragging.value || activePointIndex.value === null) return;
+  
+  const svg = svgRef.value
+  const width = svg.clientWidth
+  const height = svg.clientHeight
+  const innerWidth = width - margin.left - margin.right
+  const innerHeight = height - margin.top - margin.bottom
+
+  const xScale = d3.scaleLinear()
+    .domain([0, 1])
+    .range([0, innerWidth])
+
+  const yScale = d3.scaleLinear()
+    .domain(yDomain)
+    .range([innerHeight, 0])
+
+  // 获取鼠标相对于SVG的坐标
+  const svgRect = svg.getBoundingClientRect()
+  const mouseX = event.clientX - svgRect.left - margin.left
+  const mouseY = event.clientY - svgRect.top - margin.top
+
+  // 转换为数据坐标
+  const x = xScale.invert(mouseX)
+  const y = yScale.invert(mouseY)
+
+  // 限制x值的范围
+  const limitedX = Math.max(0, Math.min(1, x))
+  
+  // 限制y值的范围
+  const limitedY = Math.max(0, Math.min(2, y)) // 允许最高200%的值
+  
+  // 更新点位置
+  controlPoints.value[activePointIndex.value] = {
+    x: limitedX,
+    y: limitedY
+  }
+  
+  // 保持第一个和最后一个点的x坐标固定
+  if (activePointIndex.value === 0) {
+    controlPoints.value[0].x = 0
+  } else if (activePointIndex.value === controlPoints.value.length - 1) {
+    controlPoints.value[controlPoints.value.length - 1].x = 1
+  }
+  
+  // 排序控制点 - 确保x坐标递增
+  controlPoints.value.sort((a, b) => a.x - b.x);
+  
+  // 重绘图表
+  initChart()
+  
+  // 触发变更事件
+  emit('change', [...controlPoints.value])
+}
+
+// 鼠标释放事件
+const handleMouseUp = () => {
+  if (isDragging.value) {
+    console.log('结束拖动');
+  }
+  isDragging.value = false;
+  activePointIndex.value = null;
+}
+
+// 添加控制点
+const addControlPoint = () => {
+  if (controlPoints.value.length >= 8) return; // 限制最大控制点数量
+  
+  // 寻找当前两点之间最大间隔
+  let maxGap = 0;
+  let insertIndex = 1;
+  
+  for (let i = 0; i < controlPoints.value.length - 1; i++) {
+    const gap = controlPoints.value[i+1].x - controlPoints.value[i].x;
+    if (gap > maxGap) {
+      maxGap = gap;
+      insertIndex = i + 1;
+    }
+  }
+  
+  // 在最大间隔处插入新控制点
+  const x1 = controlPoints.value[insertIndex-1].x;
+  const x2 = controlPoints.value[insertIndex].x;
+  const y1 = controlPoints.value[insertIndex-1].y;
+  const y2 = controlPoints.value[insertIndex].y;
+  
+  // 新点位于两点中间位置，y值为线性插值
+  const newX = (x1 + x2) / 2;
+  const newY = (y1 + y2) / 2;
+  
+  // 插入新点
+  controlPoints.value.splice(insertIndex, 0, { x: newX, y: newY });
+  
+  // 重绘图表
+  initChart();
+  
+  // 触发变更事件
+  emit('change', [...controlPoints.value]);
+}
+
+// 删除控制点
+const removeControlPoint = () => {
+  // 不删除第一个和最后一个点
+  if (controlPoints.value.length <= 3) return;
+  
+  // 删除中间的一个点（倒数第二个，通常是用户自定义添加的点）
+  controlPoints.value.splice(controlPoints.value.length - 2, 1);
+  
+  // 重绘图表
+  initChart();
+  
+  // 触发变更事件
+  emit('change', [...controlPoints.value]);
+}
+
+// 重置曲线到默认状态
+const resetCurve = () => {
+  controlPoints.value = [
+    { x: 0, y: 1 },
+    { x: 0.33, y: 1 },
+    { x: 0.67, y: 1 },
+    { x: 1, y: 1 }
+  ];
+  
+  // 重绘图表
+  initChart();
+  
+  // 触发变更事件
+  emit('change', [...controlPoints.value]);
+}
+
+// 为了与TimeSeriesEditor兼容，提供resetToDefault方法作为resetCurve的别名
+const resetToDefault = resetCurve;
 
 const initChart = () => {
   if (!svgRef.value || !props.visible) return
@@ -51,7 +197,7 @@ const initChart = () => {
   g.append('g')
     .attr('class', 'grid')
     .selectAll('line.horizontal')
-    .data(d3.range(0, 2.1, 0.5)) // 更稀疏的网格线
+    .data(d3.range(0, 2.1, 0.5))
     .enter()
     .append('line')
     .attr('class', 'horizontal')
@@ -59,14 +205,13 @@ const initChart = () => {
     .attr('x2', innerWidth)
     .attr('y1', d => yScale(d))
     .attr('y2', d => yScale(d))
-    .attr('stroke', d => d === 1 ? '#9CA3AF' : '#E5E7EB')
-    .attr('stroke-width', d => d === 1 ? 1.5 : 0.5)
-    .attr('stroke-dasharray', d => d === 1 ? null : '2,2')
+    .attr('stroke', '#E5E7EB')
+    .attr('stroke-width', 1)
 
   g.append('g')
     .attr('class', 'grid')
     .selectAll('line.vertical')
-    .data(d3.range(0, 1.1, 0.1))
+    .data(d3.range(0, 1.1, 0.2))
     .enter()
     .append('line')
     .attr('class', 'vertical')
@@ -75,149 +220,109 @@ const initChart = () => {
     .attr('y1', 0)
     .attr('y2', innerHeight)
     .attr('stroke', '#E5E7EB')
-    .attr('stroke-width', 0.5)
-    .attr('stroke-dasharray', '2,2')
+    .attr('stroke-width', 1)
 
-  // 添加比例示意
+  // 添加说明文字
   g.append('text')
     .attr('x', innerWidth - 120)
     .attr('y', 15)
     .attr('text-anchor', 'start')
+    .attr('font-size', 12)
     .attr('fill', '#9CA3AF')
-    .attr('font-size', '10px')
-    .text('200% ↑')
+    .text('200% = Double')
 
   g.append('text')
     .attr('x', innerWidth - 120)
-    .attr('y', innerHeight / 2)
+    .attr('y', yScale(1) + 15)
     .attr('text-anchor', 'start')
+    .attr('font-size', 12)
     .attr('fill', '#9CA3AF')
-    .attr('font-size', '10px')
-    .text('100% →')
+    .text('100% = Original')
 
   g.append('text')
     .attr('x', innerWidth - 120)
-    .attr('y', innerHeight - 5)
+    .attr('y', innerHeight)
     .attr('text-anchor', 'start')
+    .attr('font-size', 12)
     .attr('fill', '#9CA3AF')
-    .attr('font-size', '10px')
-    .text('0% ↓')
+    .text('0% = Zero')
 
-  // 添加 x 轴
+  // 添加坐标轴
   g.append('g')
     .attr('class', 'x-axis')
-    .attr('transform', `translate(0,${innerHeight})`)
-    .call(d3.axisBottom(xScale)
-      .ticks(5)
-      .tickFormat(d3.format('.1f')))
-    .selectAll('text')
-    .style('font-size', '10px')
+    .attr('transform', `translate(0,${yScale(0)})`)
+    .call(d3.axisBottom(xScale).ticks(5))
 
-  // 添加 y 轴
   g.append('g')
     .attr('class', 'y-axis')
-    .call(d3.axisLeft(yScale)
-      .ticks(5) // 减少标注数量
-      .tickFormat(d => `${d * 100}%`))
-    .selectAll('text')
-    .style('font-size', '10px')
+    .call(d3.axisLeft(yScale).ticks(5))
 
-  // 创建贝塞尔曲线
+  // 定义曲线生成器
   const line = d3.line()
     .x(d => xScale(d.x))
     .y(d => yScale(d.y))
-    .curve(d3.curveBasis)
+    .curve(d3.curveCardinal) // 使用基数样条插值来创建平滑曲线
 
-  // 生成曲线插值点
-  const curvePoints = []
-  for (let t = 0; t <= 1; t += 0.01) {
-    const point = interpolateCurve(controlPoints.value, t)
-    curvePoints.push(point)
+  // 使用更密集的插值点来绘制平滑曲线
+  const smoothPoints = [];
+  const numPoints = 100; // 插值点数量
+  for (let i = 0; i <= numPoints; i++) {
+    const t = i / numPoints;
+    let y = 0;
+    
+    // 使用控制点进行插值
+    for (let j = 0; j < controlPoints.value.length - 1; j++) {
+      const p1 = controlPoints.value[j];
+      const p2 = controlPoints.value[j + 1];
+      
+      if (t >= p1.x && t <= p2.x) {
+        // 局部参数
+        const localT = (t - p1.x) / (p2.x - p1.x);
+        // 使用三次样条插值
+        y = p1.y * (1 - localT) * (1 - localT) * (1 - localT) +
+            3 * p1.y * localT * (1 - localT) * (1 - localT) +
+            3 * p2.y * localT * localT * (1 - localT) +
+            p2.y * localT * localT * localT;
+        break;
+      }
+    }
+    
+    smoothPoints.push({x: t, y: y});
   }
 
   // 绘制曲线
   g.append('path')
-    .datum(curvePoints)
+    .datum(smoothPoints)
     .attr('class', 'curve')
-    .attr('fill', 'none')
-    .attr('stroke', '#7C3AED')
-    .attr('stroke-width', 3)
     .attr('d', line)
+    .attr('fill', 'none')
+    .attr('stroke', '#7C3AED') // 紫色
+    .attr('stroke-width', 3)
+    .attr('stroke-linecap', 'round')
 
-  // 添加右上角的控制按钮
-  const buttonGroup = svg.append('g')
-    .attr('class', 'control-buttons')
-    .attr('transform', `translate(${width - 65}, 15)`)
-
-  // 添加按钮
-  buttonGroup.append('circle')
-    .attr('cx', 15)
-    .attr('cy', 15)
-    .attr('r', 12)
-    .attr('fill', '#7C3AED')
-    .attr('cursor', 'pointer')
-    .on('click', addControlPoint)
-
-  buttonGroup.append('text')
-    .attr('x', 15)
-    .attr('y', 15)
-    .attr('text-anchor', 'middle')
-    .attr('dominant-baseline', 'middle')
-    .attr('fill', 'white')
-    .attr('font-size', '16px')
-    .attr('pointer-events', 'none')
-    .text('+')
-
-  buttonGroup.append('circle')
-    .attr('cx', 45)
-    .attr('cy', 15)
-    .attr('r', 12)
-    .attr('fill', '#7C3AED')
-    .attr('cursor', 'pointer')
-    .on('click', removeControlPoint)
-
-  buttonGroup.append('text')
-    .attr('x', 45)
-    .attr('y', 15)
-    .attr('text-anchor', 'middle')
-    .attr('dominant-baseline', 'middle')
-    .attr('fill', 'white')
-    .attr('font-size', '16px')
-    .attr('pointer-events', 'none')
-    .text('-')
-
-  // 绘制控制点
-  const pointsGroup = g.append('g')
+  // 绘制控制点容器
+  const controlPointsGroup = g.append('g')
     .attr('class', 'control-points')
 
-  // 创建控制点拖动区域（较大区域提高易用性）
-  pointsGroup.selectAll('circle.point-target')
+  // 添加可拖动的控制点
+  controlPointsGroup.selectAll('circle.drag-area')
     .data(controlPoints.value)
     .enter()
     .append('circle')
-    .attr('class', 'point-target')
+    .attr('class', 'drag-area')
     .attr('cx', d => xScale(d.x))
     .attr('cy', d => yScale(d.y))
-    .attr('r', 15) // 增大拖动区域
+    .attr('r', 15)
     .attr('fill', 'transparent')
-    .attr('cursor', d => d.fixed ? 'not-allowed' : 'grab')
+    .attr('cursor', 'grab')
     .on('mousedown', function(event, d) {
-      if (d.fixed) return
-      
-      isDragging.value = true
-      activePointIndex.value = controlPoints.value.findIndex(p => p === d)
-      
-      d3.select(this.parentNode)
-        .selectAll('circle.point')
-        .filter((pd, i) => i === activePointIndex.value)
-        .attr('r', 8) // 增大激活点
-        .attr('stroke-width', 2.5)
-        
-      event.preventDefault()
-    })
+      // 获取当前元素的索引
+      const index = controlPoints.value.findIndex(p => p.x === d.x && p.y === d.y);
+      handleMouseDown(event, d, index);
+    });
 
   // 绘制可见控制点
-  pointsGroup.selectAll('circle.point')
+  controlPointsGroup.selectAll('circle.point')
     .data(controlPoints.value)
     .enter()
     .append('circle')
@@ -225,287 +330,182 @@ const initChart = () => {
     .attr('cx', d => xScale(d.x))
     .attr('cy', d => yScale(d.y))
     .attr('r', 6)
-    .attr('fill', d => d.fixed ? '#9CA3AF' : '#7C3AED')
+    .attr('fill', '#7C3AED')
     .attr('stroke', '#FFFFFF')
-    .attr('stroke-width', 2)
-
-  // 添加拖动效果
-  svg.on('mousemove', function(event) {
-    if (!isDragging.value || activePointIndex.value === null) return
+    .attr('stroke-width', 2);
     
-    const coords = d3.pointer(event)
-    const x = xScale.invert(coords[0] - margin.left)
-    const y = yScale.invert(coords[1] - margin.top)
-    
-    // 确保不会超出左右边界
-    const prevPoint = controlPoints.value[activePointIndex.value - 1]
-    const nextPoint = controlPoints.value[activePointIndex.value + 1]
-    
-    let newX = x
-    if (prevPoint && newX <= prevPoint.x) newX = prevPoint.x + 0.01
-    if (nextPoint && newX >= nextPoint.x) newX = nextPoint.x - 0.01
-    
-    // 限制 y 值在域范围内
-    const newY = Math.max(0, Math.min(yDomain[1], y))
-    
-    // 更新控制点位置
-    controlPoints.value[activePointIndex.value] = {
-      ...controlPoints.value[activePointIndex.value],
-      x: newX,
-      y: newY
-    }
-    
-    // 更新视图
-    initChart()
-    
-    // 触发变更事件
-    emit('change', [...controlPoints.value])
-  })
+  // 添加控制点数量按钮组
+  const buttonGroup = g.append('g')
+    .attr('class', 'control-buttons')
+    .attr('transform', `translate(${innerWidth - 50}, 10)`)
   
-  svg.on('mouseup', function() {
-    isDragging.value = false
-    activePointIndex.value = null
-    
-    // 恢复所有点大小
-    d3.select(this)
-      .selectAll('circle.point')
-      .attr('r', 6)
-      .attr('stroke-width', 2)
-  })
+  // 添加加号按钮
+  buttonGroup.append('circle')
+    .attr('cx', 12)
+    .attr('cy', 12)
+    .attr('r', 12)
+    .attr('fill', '#7C3AED')
+    .attr('cursor', 'pointer')
+    .on('click', addControlPoint)
   
-  svg.on('mouseleave', function() {
-    isDragging.value = false
-    activePointIndex.value = null
-    
-    // 恢复所有点大小
-    d3.select(this)
-      .selectAll('circle.point')
-      .attr('r', 6)
-      .attr('stroke-width', 2)
-  })
+  buttonGroup.append('text')
+    .attr('x', 12)
+    .attr('y', 16)
+    .attr('text-anchor', 'middle')
+    .attr('fill', 'white')
+    .attr('font-size', '16px')
+    .attr('font-weight', 'bold')
+    .attr('pointer-events', 'none')
+    .text('+')
   
-  // 添加拖动中的视觉指示
-  if (isDragging.value && activePointIndex.value !== null) {
-    const point = controlPoints.value[activePointIndex.value]
-    
-    g.append('circle')
-      .attr('class', 'drag-indicator')
-      .attr('cx', xScale(point.x))
-      .attr('cy', yScale(point.y))
-      .attr('r', 20)
-      .attr('fill', 'rgba(124, 58, 237, 0.1)')
-      .attr('stroke', '#7C3AED')
-      .attr('stroke-dasharray', '3,3')
-  }
+  // 添加减号按钮
+  buttonGroup.append('circle')
+    .attr('cx', 40)
+    .attr('cy', 12)
+    .attr('r', 12)
+    .attr('fill', '#7C3AED')
+    .attr('cursor', 'pointer')
+    .on('click', removeControlPoint)
+  
+  buttonGroup.append('text')
+    .attr('x', 40)
+    .attr('y', 16)
+    .attr('text-anchor', 'middle')
+    .attr('fill', 'white')
+    .attr('font-size', '16px')
+    .attr('font-weight', 'bold')
+    .attr('pointer-events', 'none')
+    .text('-')
 }
 
-// 曲线插值函数
-const interpolateCurve = (points, t) => {
-  let result = { x: 0, y: 0 }
-  
-  if (points.length === 1) {
-    return points[0]
-  }
-  
-  const newPoints = []
-  for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i]
-    const p2 = points[i+1]
-    
-    newPoints.push({
-      x: p1.x + t * (p2.x - p1.x),
-      y: p1.y + t * (p2.y - p1.y)
-    })
-  }
-  
-  return interpolateCurve(newPoints, t)
-}
-
-// 添加控制点
-const addControlPoint = () => {
-  if (controlPoints.value.length >= 8) return
-  
-  // 寻找最大间隔
-  let maxDist = 0
-  let insertIndex = 1
-  
-  for (let i = 0; i < controlPoints.value.length - 1; i++) {
-    const dist = controlPoints.value[i+1].x - controlPoints.value[i].x
-    if (dist > maxDist) {
-      maxDist = dist
-      insertIndex = i + 1
-    }
-  }
-  
-  // 在最大间隔中间插入新点
-  const prev = controlPoints.value[insertIndex - 1]
-  const next = controlPoints.value[insertIndex]
-  
-  const newPoint = {
-    x: (prev.x + next.x) / 2,
-    y: (prev.y + next.y) / 2
-  }
-  
-  controlPoints.value.splice(insertIndex, 0, newPoint)
-  initChart()
-  emit('change', [...controlPoints.value])
-}
-
-// 删除控制点
-const removeControlPoint = () => {
-  // 确保至少保留4个点（包括端点）
-  if (controlPoints.value.length <= 4) return
-  
-  // 寻找最小间隔（非固定点）
-  let minDist = Infinity
-  let removeIndex = null
-  
-  for (let i = 1; i < controlPoints.value.length - 2; i++) {
-    if (!controlPoints.value[i].fixed && !controlPoints.value[i+1].fixed) {
-      const dist = controlPoints.value[i+1].x - controlPoints.value[i].x
-      if (dist < minDist) {
-        minDist = dist
-        removeIndex = i
-      }
-    }
-  }
-  
-  if (removeIndex !== null) {
-    controlPoints.value.splice(removeIndex, 1)
-    initChart()
-    emit('change', [...controlPoints.value])
-  }
-}
-
-// 应用预设
+// 修改applyPreset函数，移除与TimeSeriesEditor重复的预设
 const applyPreset = (preset) => {
   switch (preset) {
+    case 'uniform-double':
+      controlPoints.value = [
+        { x: 0, y: 2 },
+        { x: 0.33, y: 2 },
+        { x: 0.67, y: 2 },
+        { x: 1, y: 2 }
+      ]
+      break
+    case 'uniform-half':
+      controlPoints.value = [
+        { x: 0, y: 0.5 },
+        { x: 0.33, y: 0.5 },
+        { x: 0.67, y: 0.5 },
+        { x: 1, y: 0.5 }
+      ]
+      break
+    // 这些预设与TimeSeriesEditor中的预设重复，保留以支持父组件调用
     case 'ease-in':
-      controlPoints.value = [
-        { x: 0, y: 0, fixed: true },
-        { x: 0.4, y: 0.1 },
-        { x: 0.8, y: 0.6 },
-        { x: 1, y: 1, fixed: true }
-      ]
-      break
-    case 'ease-out':
-      controlPoints.value = [
-        { x: 0, y: 0, fixed: true },
-        { x: 0.2, y: 0.4 },
-        { x: 0.6, y: 0.9 },
-        { x: 1, y: 1, fixed: true }
-      ]
-      break
+    case 'ease-out': 
     case 'ease-in-out':
-      controlPoints.value = [
-        { x: 0, y: 0, fixed: true },
-        { x: 0.3, y: 0.1 },
-        { x: 0.7, y: 0.9 },
-        { x: 1, y: 1, fixed: true }
-      ]
-      break
     case 's-curve':
-      controlPoints.value = [
-        { x: 0, y: 0, fixed: true },
-        { x: 0.2, y: 0.8 },
-        { x: 0.8, y: 0.2 },
-        { x: 1, y: 1, fixed: true }
-      ]
-      break
     case 'step':
-      // 改进阶梯形状，使其更像真正的阶梯
-      controlPoints.value = [
-        { x: 0, y: 0, fixed: true },
-        { x: 0.45, y: 0 },
-        { x: 0.45, y: 1 }, // 垂直线段第一点
-        { x: 0.55, y: 1 }, // 水平线段
-        { x: 0.55, y: 1 }, // 垂直线段第二点
-        { x: 1, y: 1, fixed: true }
-      ]
+      // 在这里处理父组件中定义的预设
+      if (preset === 'ease-in') {
+        controlPoints.value = [
+          { x: 0, y: 0.2 },
+          { x: 0.25, y: 0.4 },
+          { x: 0.75, y: 1.6 },
+          { x: 1, y: 2 }
+        ]
+      } else if (preset === 'ease-out') {
+        controlPoints.value = [
+          { x: 0, y: 2 },
+          { x: 0.25, y: 1.6 },
+          { x: 0.75, y: 0.4 },
+          { x: 1, y: 0.2 }
+        ]
+      } else if (preset === 'ease-in-out') {
+        controlPoints.value = [
+          { x: 0, y: 0.2 },
+          { x: 0.25, y: 0.4 },
+          { x: 0.75, y: 1.6 },
+          { x: 1, y: 1.8 }
+        ]
+      } else if (preset === 's-curve') {
+        controlPoints.value = [
+          { x: 0, y: 0.2 },
+          { x: 0.25, y: 1.8 },
+          { x: 0.75, y: 0.2 },
+          { x: 1, y: 1.8 }
+        ]
+      } else if (preset === 'step') {
+        controlPoints.value = [
+          { x: 0, y: 0.5 },
+          { x: 0.499, y: 0.5 },
+          { x: 0.501, y: 1.5 },
+          { x: 1, y: 1.5 }
+        ]
+      }
       break
-    case 'enhance-2x':
-      controlPoints.value = [
-        { x: 0, y: 0, fixed: true },
-        { x: 0.3, y: 0.6 },
-        { x: 0.7, y: 1.4 },
-        { x: 1, y: 2, fixed: true }
-      ]
-      break
-    case 'enhance-1.5x':
-      controlPoints.value = [
-        { x: 0, y: 0, fixed: true },
-        { x: 0.3, y: 0.5 },
-        { x: 0.7, y: 1.0 },
-        { x: 1, y: 1.5, fixed: true }
-      ]
-      break
-    case 'reduce-0.5x':
-      controlPoints.value = [
-        { x: 0, y: 0, fixed: true },
-        { x: 0.3, y: 0.25 },
-        { x: 0.7, y: 0.4 },
-        { x: 1, y: 0.5, fixed: true }
-      ]
-      break
+    default:
+      resetCurve();
+      return;
   }
   
   initChart()
   emit('change', [...controlPoints.value])
 }
 
-// 重置到默认
-const resetToDefault = () => {
-  controlPoints.value = [
-    { x: 0, y: 0, fixed: true },
-    { x: 0.2, y: 0.2 },
-    { x: 0.8, y: 0.8 },
-    { x: 1, y: 1, fixed: true }
-  ]
-  
-  initChart()
-  emit('change', [...controlPoints.value])
-}
-
-watch(() => props.visible, (visible) => {
-  if (visible) {
-    initChart()
-  }
-})
-
-// 监听尺寸变化并重新渲染
+// 确保在组件卸载时清理事件监听器
 onMounted(() => {
   if (props.visible) {
-    initChart()
+    initChart();
   }
   
-  window.addEventListener('resize', initChart)
-})
+  window.addEventListener('resize', initChart);
+  window.addEventListener('mousemove', handleMouseMove);
+  window.addEventListener('mouseup', handleMouseUp);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', initChart);
+  window.removeEventListener('mousemove', handleMouseMove);
+  window.removeEventListener('mouseup', handleMouseUp);
+});
+
+// 添加监听visible属性的变化
+watch(() => props.visible, (newVisible) => {
+  if (newVisible) {
+    initChart();
+  }
+});
 
 defineExpose({
   applyPreset,
-  resetToDefault
+  resetCurve,
+  resetToDefault // 提供兼容方法
 })
 </script>
 
 <template>
   <div class="curve-editor h-full flex flex-col">
-    <div class="flex-1 overflow-hidden">
-      <svg ref="svgRef" class="w-full h-full"></svg>
-    </div>
-    <div class="flex-none mt-8 pt-2 border-t border-gray-200">
+    <!-- 简化预设按钮，只保留两个主要的 -->
+    <div class="flex-none mb-4 pb-2 border-b border-gray-200">
       <div class="flex flex-wrap gap-2 items-center">
         <button 
-          v-for="preset in ['enhance-2x', 'enhance-1.5x', 'reduce-0.5x']"
+          v-for="preset in ['uniform-double', 'uniform-half']"
           :key="preset"
           @click="applyPreset(preset)"
           class="px-3 py-1 text-xs bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
         >
-          {{ preset === 'enhance-2x' ? '200% Enhance' : 
-             preset === 'enhance-1.5x' ? '150% Enhance' : 
-             '50% Reduce' }}
+          {{ 
+            preset === 'uniform-double' ? 'Double (200%)' : 
+            preset === 'uniform-half' ? 'Half (50%)' : preset 
+          }}
         </button>
       </div>
     </div>
+    
+    <!-- 图表区域 -->
+    <div class="flex-1 overflow-hidden relative">
+      <svg ref="svgRef" class="w-full h-full"></svg>
+    </div>
+    
+   
   </div>
 </template>
 
@@ -534,5 +534,9 @@ defineExpose({
 
 :deep(.control-buttons circle:hover) {
   filter: brightness(1.1);
+}
+
+:deep(.curve) {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
 }
 </style>

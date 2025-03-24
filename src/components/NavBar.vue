@@ -175,12 +175,21 @@
       >
         <img src="@/assets/export.svg" alt="Export" class="w-10 h-10" />
       </button>
+
+      <!-- 添加同步按钮 -->
+      <button
+        @click="handleSyncClick"
+        class="ml-3 px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+        title="同步数据到左侧"
+      >
+        Syn
+      </button>
     </div>
   </nav>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { BORDER_WIDTH, BORDER_COLOR, THEME_COLOR, WEEKDAY_COLOR, WEEKEND_COLOR } from '../utils/constants';
 import { useDatasetStore } from '../stores/datasetStore';
 import { useTimeSeriesStore } from '../stores/timeSeriesStore';
@@ -305,5 +314,96 @@ const getWeekendButtonColor = () => {
   }
   // 未选中时使用灰色
   return '#E5E5E5';
+};
+
+// 获取所有 origin 类型的曲线数据
+const getOriginSeriesData = () => {
+  return timeSeriesStore.series.filter(s => s.type === 'original');
+};
+
+// 同步按钮点击处理函数
+const handleSyncClick = () => {
+  // 获取所有 origin 曲线
+  const originSeries = getOriginSeriesData();
+  
+  if (!originSeries.length) {
+    console.warn('没有找到 origin 类型的时间序列数据');
+    return;
+  }
+  
+  // 转换数据格式
+  const formattedData = originSeries.map(series => {
+    // 从ID中提取日期和用户ID
+    let dateStr = '';
+    let userId = series.id; // 默认保持原始ID
+    
+    // 检查ID是否符合 user_XX_YYYY-MM-DD 格式
+    const idMatch = series.id.match(/^(user_(\d+))_(\d{4}-\d{2}-\d{2})$/);
+    if (idMatch) {
+      userId = parseInt(idMatch[2], 10); // 提取数字部分并转换为数字类型
+      dateStr = idMatch[3]; // 提取YYYY-MM-DD部分
+    } else if (series.data && series.data.length > 0) {
+      // 如果ID不符合特定格式，尝试从数据中提取日期
+      const firstTimeStr = series.data[0].time;
+      if (typeof firstTimeStr === 'string' && firstTimeStr.includes(' ')) {
+        dateStr = firstTimeStr.split(' ')[0];
+      } else if (typeof firstTimeStr === 'string' && firstTimeStr.includes('-')) {
+        dateStr = firstTimeStr;
+      } else {
+        // 使用当前日期作为默认值
+        const now = new Date();
+        dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      }
+      
+      // 尝试从ID中提取纯数字部分（如果ID是user_XX格式）
+      const userIdMatch = series.id.match(/^user_(\d+)$/);
+      if (userIdMatch) {
+        userId = parseInt(userIdMatch[1], 10); // 提取数字部分并转换为数字类型
+      }
+    }
+    
+    // 转换数据点格式
+    const formattedPoints = series.data.map(point => {
+      // 处理不同格式的时间
+      let timeStr = '';
+      if (typeof point.time === 'string') {
+        // 如果时间是字符串格式
+        if (point.time.includes(' ')) {
+          // 如果包含空格，则是完整日期时间
+          timeStr = point.time;
+        } else if (!isNaN(point.time)) {
+          // 如果是数字格式（小时），转换为时间字符串
+          const hours = Math.floor(point.time);
+          const minutes = Math.round((point.time - hours) * 60);
+          timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+        } else {
+          // 已经是时间格式
+          timeStr = point.time;
+        }
+      } else if (typeof point.time === 'number') {
+        // 如果时间是数字（小时），转换为时间字符串
+        const hours = Math.floor(point.time);
+        const minutes = Math.round((point.time - hours) * 60);
+        timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+      }
+      
+      return {
+        time: timeStr,
+        value: point.value
+      };
+    });
+    
+    return {
+      id: userId, // 现在userId是数字类型
+      date: dateStr,
+      data: formattedPoints
+    };
+  });
+  
+  // 更新到 store 以传递给左侧组件
+  timeSeriesStore.updateEditedSeriesData(formattedData);
+  
+  // 打印到控制台
+  console.log('同步到左侧的数据:', formattedData);
 };
 </script> 

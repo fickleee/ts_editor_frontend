@@ -153,110 +153,121 @@ const normalizeTimeSeries = (data) => {
   }))
 }
 
+const getRandomColor = () => {
+  const letters = '0123456789ABCDEF';
+  let color = '#';
+  for (let i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  return color;
+};
+
 const applyDecomposition = async () => {
+  if (!props.series || !props.series.data || isDecomposing.value) return;
+  
+  isDecomposing.value = true;
+  
   try {
-    isDecomposing.value = true
+    // Extract values from series data
+    const values = props.series.data.map(point => point.value);
     
+    // Use the dedicated decomposition method
     const response = await api.decomposeSeries(props.series.data, {
       decompositionNumber: decompositionNumber.value,
       model: model.value,
-      level: level.value
-    })
+      level: level.value,
+      method: 'wavelet'
+    });
     
-    const newSeries = []
-    const times = response.times
-
-    if (decompositionNumber.value === 2) {
-      // Normalize low frequency component
-      const lfData = normalizeTimeSeries(
-        response.low_freq.map((value, i) => ({
-          time: times[i],
-          value
-        }))
-      )
+    // Process response
+    if (response.data) {
+      // Clear any existing decomposed series
+      decomposedSeries.value = [];
       
-      // Normalize high frequency component
-      const hfData = normalizeTimeSeries(
-        response.high_freq.map((value, i) => ({
-          time: times[i],
-          value
-        }))
-      )
-
-      newSeries.push({
-        id: `${props.series.id}_LF`,
-        data: lfData,
-        type: 'LF',
-        visible: false,
-        parentId: props.series.id
-      })
+      // Create color palette for components
+      const colors = {
+        low_freq: '#8367F8',
+        mid_freq: '#9B71F6',
+        high_freq: '#6548C7',
+        trend: '#8367F8',
+        seasonal: '#9B71F6',
+        residual: '#6548C7'
+      };
       
-      newSeries.push({
-        id: `${props.series.id}_HF`,
-        data: hfData,
-        type: 'HF',
-        visible: false,
-        parentId: props.series.id
-      })
-    } else {
-      // Normalize low frequency component
-      const lfData = normalizeTimeSeries(
-        response.low_freq.map((value, i) => ({
-          time: times[i],
-          value
-        }))
-      )
+      // Create component series
+      const components = [];
       
-      // Normalize mid frequency component
-      const mfData = normalizeTimeSeries(
-        response.mid_freq.map((value, i) => ({
-          time: times[i],
-          value
-        }))
-      )
+      // Process each component from the response
+      Object.entries(response.data).forEach(([key, values]) => {
+        // Skip the original data
+        if (key === 'original') return;
+        
+        // Create a unique ID for this component
+        const componentId = `${props.series.id}_${key}`;
+        
+        // Create time-value pairs
+        const componentData = values.map((value, index) => ({
+          time: props.series.data[index].time,
+          value: value
+        }));
+        
+        // Add component to our local state
+        components.push({
+          id: componentId,
+          parentId: props.series.id,
+          label: key,
+          type: key,
+          data: componentData,
+          visible: true,
+          color: colors[key] || getRandomColor()
+        });
+      });
       
-      // Normalize high frequency component
-      const hfData = normalizeTimeSeries(
-        response.high_freq.map((value, i) => ({
-          time: times[i],
-          value
-        }))
-      )
-
-      newSeries.push({
-        id: `${props.series.id}_LF`,
-        data: lfData,
-        type: 'LF',
-        visible: false,
-        parentId: props.series.id
-      })
+      // Update the decomposed series
+      decomposedSeries.value = components;
       
-      newSeries.push({
-        id: `${props.series.id}_MF`,
-        data: mfData,
-        type: 'MF',
-        visible: false,
-        parentId: props.series.id
-      })
+      // Add visible components to the store
+      components.forEach(component => {
+        if (component.visible) {
+          store.addSeries(component);
+        }
+      });
       
-      newSeries.push({
-        id: `${props.series.id}_HF`,
-        data: hfData,
-        type: 'HF',
-        visible: false,
-        parentId: props.series.id
-      })
+      // Hide the original series
+      props.series.visible = false;
+      
+      ElMessage.success('Decomposition completed successfully');
     }
-    
-    decomposedSeries.value = newSeries
-    showDecomposition.value = false
   } catch (error) {
-    console.error('Error decomposing series:', error)
-    ElMessage.error('Failed to decompose time series')
+    console.error('Decomposition error:', error);
+    ElMessage.error('Failed to decompose the time series');
   } finally {
-    isDecomposing.value = false
+    isDecomposing.value = false;
   }
-}
+};
+
+// 在 computed 属性中添加一个方法来对子序列进行排序
+const getChildSeries = computed(() => {
+  return (parentId) => {
+    // 获取所有子序列
+    const children = store.series.filter(s => {
+      // 检查是否是分解的子序列
+      return s.id.startsWith(parentId + '_') && (s.type === 'hf' || s.type === 'mf' || s.type === 'lf');
+    });
+
+    // 定义序列类型的排序顺序
+    const typeOrder = {
+      'hf': 1,  // HF 排在最前面
+      'mf': 2,  // MF 排在中间
+      'lf': 3   // LF 排在最后
+    };
+
+    // 根据类型排序
+    return children.sort((a, b) => {
+      return typeOrder[a.type] - typeOrder[b.type];
+    });
+  };
+});
 </script>
 
 <template>
@@ -333,22 +344,8 @@ const applyDecomposition = async () => {
           class="mr-6 p-2 rounded hover:bg-gray-100"
           title="Decompose series"
         >
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <g clip-path="url(#clip0_942_176)">
-              <path d="M7.40353 1.04299C7.84015 0.89745 8.31208 1.13342 8.45762 1.57004L9.29096 4.07004C9.43647 4.50665 9.20053 4.97859 8.76391 5.12413C8.32729 5.26967 7.85536 5.0337 7.70982 4.59708L6.87648 2.09708C6.73095 1.66046 6.96692 1.18853 7.40353 1.04299Z" fill="#0F0F0F" stroke="black" stroke-width="0.6"/>
-              <path d="M18.3834 8.95536L15.1426 12.1963C14.8171 12.5217 14.2895 12.5217 13.964 12.1963C13.6386 11.8709 13.6386 11.3432 13.964 11.0178L17.2049 7.77685C18.0185 6.96326 18.0185 5.64416 17.2049 4.83057C16.3914 4.01698 15.0723 4.01698 14.2587 4.83057L11.0178 8.07148C10.6924 8.39692 10.1647 8.39692 9.83928 8.07148C9.51386 7.74605 9.51386 7.2184 9.83928 6.89297L13.0802 3.65206C14.5446 2.18759 16.919 2.18759 18.3834 3.65206C19.8479 5.11653 19.8479 7.49089 18.3834 8.95536Z" fill="#0F0F0F" stroke="black" stroke-width="0.6"/>
-              <path d="M3.65206 13.0798L6.89296 9.83885C7.2184 9.51335 7.74604 9.51335 8.07148 9.83885C8.39691 10.1643 8.39691 10.6919 8.07148 11.0174L4.83057 14.2583C4.01698 15.0719 4.01698 16.3909 4.83057 17.2045C5.64416 18.0181 6.96325 18.0181 7.77684 17.2045L11.0177 13.9636C11.3432 13.6382 11.8708 13.6382 12.1962 13.9636C12.5217 14.289 12.5217 14.8167 12.1962 15.1421L8.95536 18.383C7.49089 19.8475 5.11653 19.8475 3.65206 18.383C2.18759 16.9186 2.18759 14.5442 3.65206 13.0798Z" fill="#0F0F0F" stroke="black" stroke-width="0.6"/>
-              <path d="M2.91107 2.91107C3.2365 2.58563 3.76414 2.58563 4.08958 2.91107L6.58958 5.41107C6.91502 5.7365 6.91502 6.26414 6.58958 6.58958C6.26414 6.91502 5.7365 6.91502 5.41107 6.58958L2.91107 4.08958C2.58563 3.76414 2.58563 3.2365 2.91107 2.91107Z" fill="#0F0F0F" stroke="black" stroke-width="0.6"/>
-              <path d="M17.9111 19.0896C18.2365 19.4151 18.7641 19.4151 19.0896 19.0896C19.415 18.7641 19.415 18.2365 19.0896 17.9111L16.5896 15.4111C16.2641 15.0856 15.7365 15.0856 15.4111 15.4111C15.0856 15.7365 15.0856 16.2641 15.4111 16.5896L17.9111 19.0896Z" fill="#0F0F0F" stroke="black" stroke-width="0.6"/>
-              <path d="M13.5428 20.4301C13.6884 20.8667 14.1603 21.1027 14.5969 20.9571C15.0336 20.8116 15.2695 20.3396 15.124 19.9031L14.2906 17.4031C14.1451 16.9665 13.6731 16.7305 13.2366 16.876C12.7999 17.0216 12.564 17.4935 12.7095 17.9301L13.5428 20.4301Z" fill="#0F0F0F" stroke="black" stroke-width="0.6"/>
-              <path d="M1.04299 7.40304C0.89745 7.83966 1.13342 8.31159 1.57004 8.45714L4.07004 9.29047C4.50665 9.43604 4.97859 9.20004 5.12413 8.76342C5.26967 8.3268 5.0337 7.85487 4.59708 7.70933L2.09708 6.87599C1.66046 6.73046 1.18853 6.96643 1.04299 7.40304Z" fill="#0F0F0F" stroke="black" stroke-width="0.6"/>
-              <path d="M20.4306 13.5433C20.8672 13.6889 21.1031 14.1608 20.9576 14.5975C20.8121 15.034 20.3401 15.27 19.9036 15.1245L17.4036 14.2911C16.9669 14.1456 16.731 13.6736 16.8765 13.237C17.0221 12.8005 17.494 12.5645 17.9306 12.71L20.4306 13.5433Z" fill="#0F0F0F" stroke="black" stroke-width="0.6"/>
-            </g>
-            <defs>
-              <clipPath id="clip0_942_176">
-                <rect width="22" height="22" fill="white"/>
-              </clipPath>
-            </defs>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M0.432918 4.0408L0.183382 4.38749C0.0820015 4.53105 -0.0037871 4.73068 0.000129001 4.95479C0.000129001 5.18241 0.0820016 5.42053 0.24188 5.66216C0.475824 6.01234 0.893047 6.38353 1.54811 6.76174L7.0732 10.1235L7.00303 7.46562L0.432966 4.04078L0.432918 4.0408ZM16.4389 14.7635L16.4467 14.767C16.8366 14.9806 17.1915 15.1207 17.5697 15.1487C17.9479 15.1767 18.3105 15.0717 18.6224 14.9036C19.2073 14.5919 19.7337 14.1262 19.9247 13.4643C20.1158 12.8024 19.9481 12.025 19.3633 11.1461C19.3594 11.1356 19.3516 11.125 19.3477 11.1145C18.7628 10.2321 17.9752 9.76983 17.1524 9.68577C16.3258 9.59821 15.5343 9.83984 14.8013 10.148C14.2827 10.3721 13.9044 10.5402 13.6042 10.5963C13.304 10.6453 13.07 10.6348 12.645 10.4492L11.4597 9.82934L11.5143 11.934L16.4389 14.7635L16.4389 14.7635ZM17.1563 11.1951C18.1779 11.7519 18.5054 12.9425 17.8855 13.86L14.1891 11.8535C14.8052 10.936 16.1347 10.6418 17.1563 11.1951ZM8.31309 12.757C8.29359 13.1772 8.19223 13.3698 8.00117 13.5799C7.80232 13.79 7.4553 14.0071 6.98739 14.3083C6.33622 14.739 5.71626 15.2468 5.40434 15.9401C5.0885 16.637 5.17039 17.488 5.77087 18.3809C6.34795 19.2634 7.0264 19.7712 7.76722 19.9393C8.50416 20.1038 9.21382 19.9147 9.79479 19.6031C10.1145 19.435 10.3875 19.2004 10.5434 18.8887C10.6955 18.577 10.7306 18.2303 10.7111 17.8241L10.7072 17.8171L10.2783 12.1581L10.251 11.8219C10.2354 11.6503 10.3797 11.5033 10.5707 11.4892C10.598 11.4892 10.6214 11.4927 10.6487 11.4963H10.6604L10.5083 5.9423L10.0911 2.21631C10.0326 1.51593 9.87279 1.01168 9.63885 0.657979C9.48289 0.416349 9.28793 0.237764 9.06566 0.129193C8.84731 0.0206438 8.61337 -0.0108789 8.42231 0.00312395L7.9622 0.0311296L8.26243 10.8974L8.31312 12.7569L8.31309 12.757ZM8.98374 14.5989L9.13971 18.4755C7.94656 18.514 6.94448 17.6771 6.90549 16.609C6.86261 15.5374 7.79449 14.6374 8.98374 14.5989Z" fill="black"/>
           </svg>
         </button>
       </div>
@@ -488,61 +485,9 @@ const applyDecomposition = async () => {
       <div v-if="isDecomposing" class="text-xs text-purple-600 text-center mt-0.5">Processing...</div>
     </div>
 
-    <!-- 分解的子曲线区域 -->
-    <div v-if="decomposedSeries.length > 0" class="mt-4">
-      <div class="relative">
-        <div v-for="(ds, index) in decomposedSeries" :key="ds.id" class="relative mb-4">
-          <!-- 为子曲线添加标题栏，将类型标签移到上方左侧 -->
-          <div class="flex items-center gap-2 mb-2">
-            <!-- 类型标签在左上角 -->
-            <span :class="getTypeClass(ds.type)" class="font-bold ml-[60px]">{{ ds.type }}</span>
-            <span class="text-sm text-gray-500">{{ ds.id }}</span>
-          </div>
-          
-          <!-- 子曲线图表也与时间轴对齐 -->
-          <div class="flex relative h-[70px]">
-            <!-- 左侧控件空间 -->
-            <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-2">
-              <!-- 子曲线的可视标记按钮 -->
-              <button 
-                @click.stop="toggleChildVisibility(ds)" 
-                class="mr-6 p-2 rounded hover:bg-gray-100"
-                title="Toggle visibility in main view"
-              >
-                <span v-if="ds.visible" class="text-gray-800">
-                  <svg width="19" height="15" viewBox="0 0 19 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path fill-rule="evenodd" clip-rule="evenodd" d="M9.37047 5.33344C8.38867 5.33344 7.59272 6.12935 7.59272 7.11122C7.59272 8.09309 8.38867 8.889 9.37047 8.889C10.3524 8.889 11.1482 8.0931 11.1482 7.11122C11.1482 6.12934 10.3524 5.33344 9.37047 5.33344ZM5.81494 7.11122C5.81494 5.14749 7.40685 3.55566 9.37047 3.55566C11.3342 3.55566 12.926 5.1475 12.926 7.11122C12.926 9.07494 11.3342 10.6668 9.37047 10.6668C7.40685 10.6668 5.81494 9.07495 5.81494 7.11122Z" fill="currentColor"/>
-                    <path fill-rule="evenodd" clip-rule="evenodd" d="M0.0408457 6.84475C1.28655 2.8786 4.99136 0 9.37086 0C13.7503 0 17.4551 2.87863 18.7009 6.84475C18.7553 7.01815 18.7553 7.20407 18.7009 7.37747C17.4551 11.3436 13.7503 14.2222 9.37086 14.2222C4.99136 14.2222 1.28654 11.3436 0.040845 7.37747C-0.0136153 7.20407 -0.013615 7.01815 0.0408457 6.84475ZM1.8258 7.11111C2.92422 10.2192 5.88876 12.4444 9.37086 12.4444C12.8529 12.4444 15.8175 10.2192 16.9159 7.11111C15.8175 4.00306 12.8529 1.77778 9.37086 1.77778C5.88876 1.77778 2.92423 4.00304 1.8258 7.11111Z" fill="currentColor"/>
-                  </svg>
-                </span>
-                <span v-else class="text-gray-400">
-                  <svg width="19" height="18" viewBox="0 0 19 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M1.48177 1L17.4818 17M7.56557 7.14546C7.101 7.62542 6.8151 8.27929 6.8151 9C6.8151 10.4728 8.00904 11.6667 9.48175 11.6667C10.2129 11.6667 10.8753 11.3724 11.357 10.896M4.59288 4.24191C2.90461 5.35586 1.61868 7.03017 1 9C2.13267 12.6063 5.50183 15.2222 9.48193 15.2222C11.2498 15.2222 12.8972 14.7061 14.2816 13.8164M8.59286 2.82168C8.88531 2.79265 9.18193 2.77778 9.48193 2.77778C13.4621 2.77778 16.8313 5.3937 17.9639 9C17.7144 9.79467 17.3562 10.5412 16.9068 11.2222" stroke="currentColor" stroke-width="1.77778" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </span>
-              </button>
-            </div>
-            
-            <!-- 图表区域 -->
-            <div class="flex-1 relative pr-0">
-              <!-- 始终显示子曲线，不受可见性影响 -->
-              <TimeSeriesChart
-                :series="[{...ds, visible: true}]"
-                :height="70"
-                :showGrid="false"
-                :isMainChart="false"
-                :showTimeAxis="false"
-                :hoverTime="hoverTime"
-                :timeAxisConfig="timeAxisConfig"
-              />
-            </div>
-            
+    <!-- 子序列框直接显示在原序列下方 -->
 
-
-          </div>
-        </div>
-      </div>
-    </div>
+   
   </div>
 </template>
 

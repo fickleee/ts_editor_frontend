@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as d3 from 'd3'
 import { generateHouseData } from '../utils/generateData'
+import { ElMessage } from 'element-plus'
 
 export const useTimeSeriesStore = defineStore('timeSeries', () => {
   const series = ref([])
@@ -12,6 +13,14 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   const selectedTimeRange = ref(null)
   const selectedSeries = ref([])
   const previewSeries = ref(null)
+
+  const viewport = ref({
+    start: 0,
+    end: 24
+  });
+
+  // 添加用于存储从右侧发送到左侧的数据
+  const editedSeriesData = ref([]);
 
   const initializeData = () => {
     // Generate data for three consecutive days
@@ -97,26 +106,86 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const seriesIndex = series.value.findIndex(s => s.id === seriesId)
     if (seriesIndex === -1) return
 
-    // Create a deep copy of the data to avoid mutation issues
-    const newData = JSON.parse(JSON.stringify(series.value[seriesIndex].data))
+    // 获取当前序列
+    const currentSeries = series.value[seriesIndex]
     const { start, end } = selectedTimeRange.value
 
-    // Move selected portion
-    newData.forEach((point, i) => {
-      if (point && point.time >= start && point.time <= end) {
-        newData[i] = {
-          time: point.time + offset.x,
-          value: Math.max(0, Math.min(100, point.value + offset.y))
+    // 检查这个序列是否有子序列
+    const hasChildren = series.value.some(s => s.parentId === seriesId)
+
+    // 如果是子序列，需要更新父序列
+    if (currentSeries.parentId) {
+      const parentIndex = series.value.findIndex(s => s.id === currentSeries.parentId)
+      if (parentIndex !== -1) {
+        // 获取所有子序列
+        const childSeries = series.value.filter(s => s.parentId === currentSeries.parentId)
+        
+        // 创建父序列的新数据
+        const newParentData = JSON.parse(JSON.stringify(series.value[parentIndex].data))
+        
+        // 更新当前子序列的数据
+        const newData = JSON.parse(JSON.stringify(currentSeries.data))
+        
+        newData.forEach((point, i) => {
+          if (point && point.time >= start && point.time <= end) {
+            newData[i] = {
+              time: point.time + offset.x,
+              value: Math.max(0, Math.min(15000, point.value + offset.y))
+            }
+          }
+        })
+        
+        // 更新父序列数据（所有子序列之和）
+        newParentData.forEach((point, i) => {
+          if (point) {
+            point.value = 0; // 重置为0
+            // 累加所有子序列的值
+            childSeries.forEach(child => {
+              const childData = child.id === seriesId ? newData : child.data;
+              if (childData[i] && childData[i].time === point.time) {
+                point.value += childData[i].value;
+              }
+            });
+          }
+        })
+        
+        // 更新子序列和父序列
+        series.value[seriesIndex] = {
+          ...currentSeries,
+          data: newData
+        }
+        
+        series.value[parentIndex] = {
+          ...series.value[parentIndex],
+          data: newParentData
         }
       }
-    })
-
-    // Sort data by time
-    newData.sort((a, b) => a.time - b.time)
-
-    series.value[seriesIndex] = {
-      ...series.value[seriesIndex],
-      data: newData
+    } else {
+      // 是原始序列或父序列
+      // 如果有子序列，提示用户但仍允许编辑
+      if (hasChildren) {
+        ElMessage.warning('警告：修改父序列会破坏与子序列的一致性')
+      }
+      
+      // 正常编辑序列
+      const newData = JSON.parse(JSON.stringify(currentSeries.data))
+      
+      newData.forEach((point, i) => {
+        if (point && point.time >= start && point.time <= end) {
+          newData[i] = {
+            time: point.time + offset.x,
+            value: Math.max(0, Math.min(15000, point.value + offset.y))
+          }
+        }
+      })
+      
+      // 排序数据
+      newData.sort((a, b) => a.time - b.time)
+      
+      series.value[seriesIndex] = {
+        ...currentSeries,
+        data: newData
+      }
     }
 
     saveState()
@@ -128,122 +197,29 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const seriesIndex = series.value.findIndex(s => s.id === seriesId)
     if (seriesIndex === -1) return
 
-    const { start, end } = selectedTimeRange.value
-    
-    // Create a deep copy of the data to avoid mutation issues
+    // 复制数据避免直接修改
     const newData = JSON.parse(JSON.stringify(series.value[seriesIndex].data))
+    const { start, end } = selectedTimeRange.value
+    const duration = end - start
 
-    // Get value range of selected data
-    const selectedData = newData.filter(point => 
-      point && 
-      !isNaN(point.time) && 
-      !isNaN(point.value) && 
-      point.time >= start && 
-      point.time <= end
-    )
-    
-    if (selectedData.length === 0) return
-
-    // Safely calculate min and max values
-    const validValues = selectedData
-      .map(p => p.value)
-      .filter(v => v !== null && v !== undefined && !isNaN(v))
-    
-    if (validValues.length === 0) return
-    
-    const minValue = Math.min(...validValues)
-    const maxValue = Math.max(...validValues)
-    const valueRange = maxValue - minValue
-
-    // Create interpolation function from curve points
-    const curveInterpolate = d3.scaleLinear()
-      .domain(curve.map(p => p.x))
-      .range(curve.map(p => p.y))
-      .clamp(true)
-
-    // Calculate transition ranges
-    const transitionRange = 0.5 // Hours for transition
-    const startTransition = Math.max(0, start - transitionRange)
-    const endTransition = Math.min(24, end + transitionRange)
-
-    // Apply curve transformation with smooth transitions
-    for (let i = 0; i < newData.length; i++) {
-      const point = newData[i]
-      
-      // Skip invalid points
-      if (!point || 
-          point.time === null || 
-          point.time === undefined || 
-          point.value === null || 
-          point.value === undefined || 
-          isNaN(point.time) || 
-          isNaN(point.value)) {
-        continue
-      }
-      
+    // 对选中范围内的每个数据点应用曲线
+    newData.forEach((point, i) => {
       if (point.time >= start && point.time <= end) {
-        // Main curve transformation
-        // Handle edge case where valueRange is 0 (flat line)
-        if (valueRange === 0 || valueRange < 0.0001) {
-          // If the range is 0, just keep the same value
-          newData[i].value = minValue
-        } else {
-          // Normal case - apply curve transformation
-          const normalizedValue = (point.value - minValue) / valueRange
-          const transformedNormal = curveInterpolate(normalizedValue)
-          const transformedValue = transformedNormal * valueRange + minValue
-          newData[i].value = Math.max(0, Math.min(100, transformedValue))
-        }
-      } else if (point.time >= startTransition && point.time < start) {
-        // Smooth transition before selection
-        const progress = (point.time - startTransition) / transitionRange
-        const easeProgress = d3.easeCubicInOut(progress)
+        // 计算当前点在选择范围内的相对位置（0-1）
+        const relativePosition = (point.time - start) / duration
         
-        // Find the closest point at the start of the selection
-        const closestStartPoint = findClosestPoint(newData, start)
+        // 使用曲线在该位置的 y 值作为乘数
+        const multiplier = interpolateCurveAtPosition(curve, relativePosition)
         
-        if (closestStartPoint && closestStartPoint.value !== null && closestStartPoint.value !== undefined && !isNaN(closestStartPoint.value)) {
-          // Calculate what this point's value would be after transformation
-          let transformedStartValue
-          
-          if (valueRange === 0 || valueRange < 0.0001) {
-            transformedStartValue = minValue
-          } else {
-            const normalizedStart = (closestStartPoint.value - minValue) / valueRange
-            const transformedNormal = curveInterpolate(normalizedStart)
-            transformedStartValue = transformedNormal * valueRange + minValue
-          }
-          
-          // Blend between original and transformed
-          newData[i].value = point.value * (1 - easeProgress) + transformedStartValue * easeProgress
-        }
-      } else if (point.time > end && point.time <= endTransition) {
-        // Smooth transition after selection
-        const progress = (point.time - end) / transitionRange
-        const easeProgress = d3.easeCubicInOut(progress)
-        
-        // Find the closest point at the end of the selection
-        const closestEndPoint = findClosestPoint(newData, end)
-        
-        if (closestEndPoint && closestEndPoint.value !== null && closestEndPoint.value !== undefined && !isNaN(closestEndPoint.value)) {
-          // Calculate what this point's value would be after transformation
-          let transformedEndValue
-          
-          if (valueRange === 0 || valueRange < 0.0001) {
-            transformedEndValue = minValue
-          } else {
-            const normalizedEnd = (closestEndPoint.value - minValue) / valueRange
-            const transformedNormal = curveInterpolate(normalizedEnd)
-            transformedEndValue = transformedNormal * valueRange + minValue
-          }
-          
-          // Blend between transformed and original
-          newData[i].value = transformedEndValue * (1 - easeProgress) + point.value * easeProgress
+        // 应用乘数到原始值
+        newData[i] = {
+          time: point.time,
+          value: point.value * multiplier
         }
       }
-    }
+    })
 
-    // Make sure we preserve all data points
+    // 更新数据
     series.value[seriesIndex] = {
       ...series.value[seriesIndex],
       data: newData
@@ -252,30 +228,30 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     saveState()
   }
 
-  // Helper function to find the closest point to a given time
-  const findClosestPoint = (data, time) => {
-    if (!data || data.length === 0) return null
+  // 根据相对位置插值曲线值
+  const interpolateCurveAtPosition = (curve, position) => {
+    // 确保位置在0-1范围内
+    position = Math.max(0, Math.min(1, position))
     
-    let closestPoint = null
-    let minDistance = Infinity
+    // 找到位置两侧的控制点
+    let leftIndex = 0
+    let rightIndex = curve.length - 1
     
-    for (const point of data) {
-      if (point && 
-          point.time !== null && 
-          point.time !== undefined && 
-          !isNaN(point.time) &&
-          point.value !== null &&
-          point.value !== undefined &&
-          !isNaN(point.value)) {
-        const distance = Math.abs(point.time - time)
-        if (distance < minDistance) {
-          minDistance = distance
-          closestPoint = point
-        }
+    for (let i = 0; i < curve.length - 1; i++) {
+      if (curve[i].x <= position && curve[i + 1].x >= position) {
+        leftIndex = i
+        rightIndex = i + 1
+        break
       }
     }
     
-    return closestPoint
+    // 如果位置恰好在控制点上，直接返回该点的 y 值
+    if (curve[leftIndex].x === position) return curve[leftIndex].y
+    if (curve[rightIndex].x === position) return curve[rightIndex].y
+    
+    // 否则线性插值
+    const t = (position - curve[leftIndex].x) / (curve[rightIndex].x - curve[leftIndex].x)
+    return curve[leftIndex].y + t * (curve[rightIndex].y - curve[leftIndex].y)
   }
 
   const expandTimeSeries = (selections) => {
@@ -759,6 +735,52 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     }
   }
 
+  function triggerUpdate() {
+    // This is a dummy method to trigger reactivity updates
+    // We just need to touch a reactive property
+    series.value = [...series.value];
+  }
+
+  function setViewport(newViewport) {
+    viewport.value = newViewport;
+  }
+
+  const getViewport = computed(() => viewport.value);
+
+  // 添加修改函数
+  const updateEditedSeriesData = (data) => {
+    // 处理数据，确保数值格式正确
+    const processedData = data.map(series => {
+      // 处理每个数据点
+      const processedPoints = series.data.map(point => {
+        let time = point.time;
+        let value = point.value;
+        
+        // 如果时间是数字，保留两位小数
+        if (typeof time === 'number') {
+          time = parseFloat(time.toFixed(2));
+        }
+        
+        // 值保留八位小数
+        if (typeof value === 'number') {
+          value = parseFloat(value.toFixed(8));
+        }
+        
+        return {
+          time,
+          value
+        };
+      });
+      
+      return {
+        ...series,
+        data: processedPoints
+      };
+    });
+    
+    editedSeriesData.value = processedData;
+  }
+
   return {
     series,
     selectedTimeRange,
@@ -781,6 +803,12 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     importData,
     setPreviewSeries,
     clearPreviewSeries,
-    deleteSeries
+    deleteSeries,
+    triggerUpdate,
+    viewport,
+    setViewport,
+    getViewport,
+    editedSeriesData,
+    updateEditedSeriesData
   }
 })

@@ -97,7 +97,14 @@ const handleDrop = (e) => {
     date: date,
     data: data.sort((a, b) => a.time.localeCompare(b.time)) // 按时间排序
   }));
-  // TODO: 将转换后的数据传递给 TimeSeriesEditor 组件
+
+ // TODO: 将转换后的数据传递给 TimeSeriesEditor 组件
+  if (trans_data.length > 0) {
+    // 在全局事件总线上触发一个事件以传递数据到 TimeSeriesEditor
+    window.dispatchEvent(new CustomEvent('add-time-series', { 
+      detail: trans_data 
+    }));
+  }
 };
 
 // 添加全局事件监听
