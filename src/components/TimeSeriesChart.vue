@@ -400,15 +400,23 @@ const initChart = () => {
     const seriesGroup = g.append('g')
       .attr('class', `series ${getSeriesSelector(s.id)}`)
     
-    // 简化的颜色逻辑
+    // 改进颜色逻辑
     let seriesColor = '#ABABAB'; // 默认灰色
     
-    // 如果是选中状态，显示金色
-    if (props.isSelected) {
+    // 在主视图中检查是否是选定的系列
+    if (props.isMainChart && (s.id === props.selectedSeriesId || props.selectedSeries.includes(s.id))) {
+      seriesColor = '#D4A554'; // 选中时显示金色
+    } else if (props.isSelected) {
+      // TimeSeriesView 中显示的系列且是被选中的状态
       seriesColor = '#D4A554'; // 金色
     } else if (!props.isMainChart) {
       // 非主视图且未选中时为黑色
       seriesColor = '#000000';
+    }
+    
+    // 如果是悬停状态，优先级高于选中状态
+    if (props.isMainChart && s.id === props.hoveredSeriesId) {
+      seriesColor = '#D4A554'; // 悬停时也是金色，但我们会增加线宽区分
     }
     
     // 绘制线条
@@ -437,7 +445,7 @@ const initChart = () => {
         })
     }
     
-    if (s.id === props.hoveredSeriesId && props.isMainChart) {
+    if ((s.id === props.hoveredSeriesId || s.id === props.selectedSeriesId) && props.isMainChart) {
       seriesGroup.raise()
     }
   })
@@ -714,7 +722,39 @@ watch(() => props.hoverTime, (newTime) => {
   }
 }, { immediate: true })
 
-// Update line thickness when hoveredSeriesId changes
+// Add a new watch for selectedSeriesId to update colors when selection changes
+watch(() => props.selectedSeriesId, (newId, oldId) => {
+  if (!svg.value || !props.isMainChart) return
+  
+  props.series.forEach(s => {
+    if (!s.visible) return
+    
+    const isSelected = newId === s.id
+    const wasSelected = oldId === s.id
+    const selector = getSeriesSelector(s.id)
+    const seriesGroup = svg.value.select(`.${selector}`)
+    
+    if (!seriesGroup.empty()) {
+      seriesGroup.select('.line')
+        .attr('stroke', isSelected ? '#D4A554' : '#ABABAB')
+      
+      if (isSelected) {
+        seriesGroup.raise()
+      }
+    }
+    
+    // If selection changed, we need to redraw to ensure proper coloring
+    if (isSelected !== wasSelected) {
+      // Schedule a refresh to ensure color changes stick
+      setTimeout(() => {
+        const currentStroke = seriesGroup.select('.line').attr('stroke')
+        seriesGroup.select('.line').attr('stroke', currentStroke)
+      }, 10)
+    }
+  })
+}, { immediate: true })
+
+// Modify existing hoveredSeriesId watch to respect selection state
 watch(() => props.hoveredSeriesId, (newId) => {
   if (!svg.value || !props.isMainChart) return
   
@@ -722,13 +762,14 @@ watch(() => props.hoveredSeriesId, (newId) => {
     if (!s.visible) return
     
     const isHovered = newId === s.id
+    const isSelected = s.id === props.selectedSeriesId || props.selectedSeries.includes(s.id)
     const selector = getSeriesSelector(s.id)
     const seriesGroup = svg.value.select(`.${selector}`)
     
     if (!seriesGroup.empty()) {
       seriesGroup.select('.line')
         .attr('stroke-width', isHovered ? 3 : 2)
-        .attr('stroke', isHovered ? '#D4A554' : '#ABABAB')  // 更新颜色
+        .attr('stroke', isHovered || isSelected ? '#D4A554' : '#ABABAB')
       
       if (isHovered) {
         seriesGroup.raise()
@@ -736,6 +777,28 @@ watch(() => props.hoveredSeriesId, (newId) => {
     }
   })
 }, { immediate: true })
+
+// Add new watch for selectedSeries array (for multi-select cases)
+watch(() => props.selectedSeries, (newSelectedSeries) => {
+  if (!svg.value || !props.isMainChart) return
+  
+  props.series.forEach(s => {
+    if (!s.visible) return
+    
+    const isSelected = newSelectedSeries.includes(s.id)
+    const selector = getSeriesSelector(s.id)
+    const seriesGroup = svg.value.select(`.${selector}`)
+    
+    if (!seriesGroup.empty()) {
+      seriesGroup.select('.line')
+        .attr('stroke', isSelected ? '#D4A554' : '#ABABAB')
+      
+      if (isSelected) {
+        seriesGroup.raise()
+      }
+    }
+  })
+}, { deep: true, immediate: true })
 
 watch(() => props.series, initChart, { deep: true })
 watch(() => props.selection, initChart)

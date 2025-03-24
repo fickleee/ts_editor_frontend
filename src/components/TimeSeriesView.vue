@@ -5,6 +5,7 @@ import { downloadCSV } from '../utils/csvUtils'
 import { api } from '../services/api'
 import { useTimeSeriesStore } from '../stores/timeSeriesStore'
 import { ElMessage, ElScrollbar, ElSlider } from 'element-plus'
+import { getRandomColor, getColorByType } from '../utils/uiUtils'
 
 const props = defineProps({
   series: Object,
@@ -126,17 +127,40 @@ const deleteSeries = (event) => {
 }
 
 const toggleDecomposition = () => {
-  showDecomposition.value = !showDecomposition.value
-  if (!showDecomposition.value) {
-    // 取消分解时，需要从store中移除所有子曲线
-    decomposedSeries.value.forEach(s => {
-      const index = store.series.findIndex(storeSeries => storeSeries.id === s.id)
-      if (index !== -1) {
-        store.series.splice(index, 1)
-      }
-    })
-    decomposedSeries.value = []
+  // If decomposition is currently showing, close it
+  if (showDecomposition.value) {
+    showDecomposition.value = false;
+    return;
   }
+  
+  // Check if the series already has child components
+  const existingChildSeries = store.series.filter(s => 
+    s.parentId === props.series.id && 
+    (s.type === 'high_freq' || s.type === 'low_freq' || s.type === 'mid_freq' ||
+     s.type === 'hf' || s.type === 'lf' || s.type === 'mf')
+  );
+  
+  // If child series exist, remove them and restore original
+  if (existingChildSeries.length > 0) {
+    // Remove all child series from the store
+    existingChildSeries.forEach(childSeries => {
+      store.deleteSeries(childSeries.id);
+    });
+    
+    // Clear local decomposed series array
+    decomposedSeries.value = [];
+    
+    // Make the original series visible again
+    props.series.visible = true;
+    
+    // Show success message
+    ElMessage.success('Decomposition components removed');
+    
+    return;
+  }
+  
+  // Otherwise, show the decomposition panel for new decomposition
+  showDecomposition.value = true;
 }
 
 const normalizeTimeSeries = (data) => {
@@ -152,15 +176,6 @@ const normalizeTimeSeries = (data) => {
     value: range > 0 ? ((point.value - min) / range) * 10 : point.value
   }))
 }
-
-const getRandomColor = () => {
-  const letters = '0123456789ABCDEF';
-  let color = '#';
-  for (let i = 0; i < 6; i++) {
-    color += letters[Math.floor(Math.random() * 16)];
-  }
-  return color;
-};
 
 const applyDecomposition = async () => {
   if (!props.series || !props.series.data || isDecomposing.value) return;
@@ -237,6 +252,9 @@ const applyDecomposition = async () => {
       props.series.visible = false;
       
       ElMessage.success('Decomposition completed successfully');
+      
+      // Close the decomposition panel after successful decomposition
+      showDecomposition.value = false;
     }
   } catch (error) {
     console.error('Decomposition error:', error);
@@ -362,6 +380,7 @@ const getChildSeries = computed(() => {
           :hoverTime="hoverTime"
           :timeAxisConfig="timeAxisConfig"
           :isSelected="isSelected"
+          :selectedSeriesId="isSelected ? series.id : null"
         />
       </div>
       

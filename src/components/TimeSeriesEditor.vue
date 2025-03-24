@@ -6,6 +6,7 @@ import TimeSeriesView from './TimeSeriesView.vue'
 import CurveEditor from './CurveEditor.vue'
 import { ElMessage } from 'element-plus'
 import { BORDER_WIDTH, BORDER_COLOR } from '../utils/constants'
+import { generateHouseData } from '../utils/generateData'
 
 const store = useTimeSeriesStore()
 
@@ -244,7 +245,6 @@ const calculateDynamicSensitivity = (seriesId) => {
     sensitivity = Math.max(minSensitivity, Math.min(maxSensitivity, sensitivity));
   }
   
-  console.log(`数据范围: ${valueRange}, 灵敏度系数: ${sensitivity.toFixed(6)}`);
   return sensitivity;
 };
 
@@ -543,142 +543,35 @@ const getChildSeries = (parentId) => {
 
 // Function to initialize default data with the new range
 const initializeDefaultData = () => {
-  // Generate three default series with values in the 0-150 range
-  const defaultSeries = ['Default 1', 'Default 2', 'Default 3'];
+  // 使用三种不同类型的参数生成数据
+  const defaultSeries = [
+    { id: 'Default 1', patternType: 'morning' },
+    { id: 'Default 2', patternType: 'afternoon' },
+    { id: 'Default 3', patternType: 'evening' }
+  ];
   
-  defaultSeries.forEach((name, index) => {
-    // Generate time points for a day
-    const data = [];
-    const minutesPerDay = 24 * 60;
-    const samplingInterval = 5; // 5 minutes
-    const samplesPerDay = minutesPerDay / samplingInterval;
+  defaultSeries.forEach(({ id, patternType }) => {
+    // 直接使用 generateData.js 中的函数
+    const data = generateHouseData(1, patternType); // 只生成1天的数据，传入模式类型
     
-    for (let sample = 0; sample < samplesPerDay; sample++) {
-      const timeInMinutes = sample * samplingInterval;
-      const hour = timeInMinutes / 60;
-      
-      // Generate values in the 0-150 range with different patterns
-      let value;
-      if (index === 0) {
-        // First series: Morning peak pattern
-        if (hour >= 7 && hour <= 10) {
-          value = 100 + Math.random() * 40;
-        } else if (hour >= 17 && hour <= 21) {
-          value = 80 + Math.random() * 30;
-        } else {
-          value = 30 + Math.random() * 20;
-        }
-      } else if (index === 1) {
-        // Second series: Afternoon peak pattern
-        if (hour >= 12 && hour <= 15) {
-          value = 120 + Math.random() * 25;
-        } else if (hour >= 19 && hour <= 22) {
-          value = 90 + Math.random() * 20;
-        } else {
-          value = 40 + Math.random() * 15;
-        }
-      } else {
-        // Third series: Evening peak pattern
-        if (hour >= 18 && hour <= 22) {
-          value = 130 + Math.random() * 20;
-        } else if (hour >= 8 && hour <= 11) {
-          value = 70 + Math.random() * 20;
-        } else {
-          value = 50 + Math.random() * 10;
-        }
-      }
-      
-      // Add some noise
-      const noise = Math.random() * 10 - 5;
-      
-      data.push({
-        time: hour,
-        value: Math.max(5, Math.min(150, value + noise))
-      });
-    }
-    
-    // Add to store
+    // 添加到 store
     store.addSeries({
-      id: name,
-      label: name,
-      data: data.sort((a, b) => a.time - b.time),
+      id,
+      label: id,
+      data: data,
       type: 'original',
       visible: true,
       color: getRandomColor()
     });
   });
   
-  // Set initial viewport if the function exists
+  // 设置视图范围
   if (typeof store.setViewport === 'function') {
     store.setViewport({
       start: 0,
       end: 24
     });
-  } else {
-    console.warn('setViewport function not available in the store');
   }
-};
-
-// Add this function after initializeDefaultData
-const initializeDefaultDataSimple = () => {
-  // Generate three default series with values in the 0-150 range
-  const defaultSeries = ['Default 1', 'Default 2', 'Default 3'];
-  
-  defaultSeries.forEach((name, index) => {
-    // Generate similar data but using store.initializeData directly
-    store.addSeries({
-      id: name,
-      label: name,
-      data: generateCustomData(index),
-      type: 'original',
-      visible: true,
-      color: getRandomColor()
-    });
-  });
-};
-
-// Helper to generate custom data with appropriate range
-const generateCustomData = (seriesIndex) => {
-  const data = [];
-  for (let hour = 0; hour < 24; hour += 0.1) {
-    let value;
-    
-    if (seriesIndex === 0) {
-      // Morning peak pattern
-      if (hour >= 7 && hour <= 10) {
-        value = 100 + Math.random() * 40;
-      } else if (hour >= 17 && hour <= 21) {
-        value = 80 + Math.random() * 30;
-      } else {
-        value = 30 + Math.random() * 20;
-      }
-    } else if (seriesIndex === 1) {
-      // Afternoon peak pattern
-      if (hour >= 12 && hour <= 15) {
-        value = 120 + Math.random() * 25;
-      } else if (hour >= 19 && hour <= 22) {
-        value = 90 + Math.random() * 20;
-      } else {
-        value = 40 + Math.random() * 15;
-      }
-    } else {
-      // Evening peak pattern
-      if (hour >= 18 && hour <= 22) {
-        value = 130 + Math.random() * 20;
-      } else if (hour >= 8 && hour <= 11) {
-        value = 70 + Math.random() * 20;
-      } else {
-        value = 50 + Math.random() * 10;
-      }
-    }
-    
-    data.push({
-      time: hour,
-      value: Math.max(5, Math.min(150, value + Math.random() * 10 - 5))
-    });
-  }
-  
-  return data.sort((a, b) => a.time - b.time);
 };
 
 onMounted(() => {
@@ -688,24 +581,18 @@ onMounted(() => {
   } catch (error) {
     console.warn('Error in custom initialization:', error);
     // Fall back to a simpler method or the store's built-in method
-    initializeDefaultDataSimple();
+    initializeDefaultData();
   }
   
-  // Listen for the add-time-series event
-  window.addEventListener('add-time-series', handleAddTimeSeries);
-  
-  // 添加对 add-time-series 事件的监听
+  // 合并重复的事件监听
   window.addEventListener('add-time-series', (event) => {
     console.log('TimeSeriesEditor 接收到的数据:', event.detail);
-    // 处理数据的代码...
+    handleAddTimeSeries(event);
   });
 })
 
 onUnmounted(() => {
-  // Remove event listener
-  window.removeEventListener('add-time-series', handleAddTimeSeries);
-  
-  // 移除事件监听
+  // 移除事件监听 (也只需要一处)
   window.removeEventListener('add-time-series', handleAddTimeSeries);
 })
 
