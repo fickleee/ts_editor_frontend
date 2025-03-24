@@ -195,13 +195,110 @@ function optimizeRadialLayout(data) {
   
   // 按照最优路径重新排序数据
   const optimizedData = optimalOrder.map(index => clonedData[index]);
+  // 按照最优路径重新排序数据后再逆向
+  // const optimizedData = optimalOrder.map(index => clonedData[index]).reverse();
+  return optimizedData;
+}
+
+/**
+ * 计算两条曲线之间的正确的G2距离（考虑所有峰值对的方向性差异）
+ * @param {Array} curveA 第一条曲线数据
+ * @param {Array} curveB 第二条曲线数据
+ * @returns {number} 距离值
+ */
+function calculateCorrectG2Distance(curveA, curveB) {
+  if (!curveA || !curveB || curveA.length === 0 || curveB.length === 0) {
+    return 1; // 最大距离
+  }
+
+  // 1. 找出两条曲线的峰值
+  const peaksA = findPeaks(curveA);
+  const peaksB = findPeaks(curveB);
+
+  if (peaksA.length === 0 || peaksB.length === 0) {
+    return 1; // 如果任一曲线没有峰值，返回最大距离
+  }
+
+  // 2. 计算所有峰值对的方向性差异
+  let totalDirectionalDiff = 0;
+  let pairCount = 0;
+
+  // 对每一对峰值进行比较
+  for (const peakA of peaksA) {
+    for (const peakB of peaksB) {
+      // 只考虑从左到右的方向（即 A 的峰值位置大于等于 B 的峰值位置的情况）
+      if (peakA >= peakB) {
+        totalDirectionalDiff += (peakA - peakB);
+        pairCount++;
+      }
+    }
+  }
+
+  // 如果没有有效的峰值对，返回最大距离
+  if (pairCount === 0) return 1;
+
+  return totalDirectionalDiff / pairCount;
+}
+
+/**
+ * 计算两条曲线之间的正确的综合距离
+ * @param {Array} curveA 第一条曲线数据
+ * @param {Array} curveB 第二条曲线数据
+ * @returns {number} 综合距离值
+ */
+function calculateCorrectCombinedDistance(curveA, curveB) {
+  // 直接使用G2距离，因为根据优化函数，我们只需要最小化G2
+  return calculateCorrectG2Distance(curveA, curveB);
+}
+
+/**
+ * 使用正确的距离度量构建距离矩阵
+ * @param {Array} curves 曲线数组
+ * @returns {Array} 距离矩阵
+ */
+function buildCorrectDistanceMatrix(curves) {
+  const n = curves.length;
+  const distanceMatrix = Array(n).fill().map(() => Array(n).fill(0));
+  
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (i === j) continue; // 自己到自己的距离为0
+      distanceMatrix[i][j] = calculateCorrectG2Distance(curves[i].res, curves[j].res);
+    }
+  }
+  
+  return distanceMatrix;
+}
+
+/**
+ * 使用正确的度量优化径向布局
+ * @param {Array} data 原始数据
+ * @returns {Array} 优化后的数据
+ */
+function optimizeRadialLayoutCorrect(data) {
+  if (!data || data.length <= 1) return data;
+  
+  // 创建深拷贝以避免修改原始数据
+  const clonedData = JSON.parse(JSON.stringify(data));
+  
+  // 使用正确的距离度量构建距离矩阵
+  const distanceMatrix = buildCorrectDistanceMatrix(clonedData);
+  
+  // 解决TSP问题，获取最优路径
+  const optimalOrder = solveOptimalOrder(distanceMatrix);
+  
+  // 按照最优路径重新排序数据
+  const optimizedData = optimalOrder.map(index => clonedData[index]);
   
   return optimizedData;
 }
 
 export {
   optimizeRadialLayout,
+  optimizeRadialLayoutCorrect,
   calculateG1Distance,
   calculateG2Distance,
-  calculateCombinedDistance
+  calculateCombinedDistance,
+  calculateCorrectG2Distance,
+  calculateCorrectCombinedDistance
 };
