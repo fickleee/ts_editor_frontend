@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 import './index.css'
 // 引入pinia仓库
-import pinia from './store'
+import pinia from './stores/index'
 // 引入element-plus
 import ElementPlus from 'element-plus'
 import App from './App.vue'

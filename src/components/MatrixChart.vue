@@ -412,6 +412,39 @@ const createOverviewChart = (data, container) => {
             .style('cursor', 'move')
             .call(d3.drag()
               .on('start', function(event, d) {
+                // 创建拖拽缩略图
+                const dragImage = document.createElement('div');
+                dragImage.className = 'drag-image';
+                
+                // 创建SVG元素
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('width', '40');
+                svg.setAttribute('height', '40');
+                svg.setAttribute('viewBox', '0 0 40 40');
+                
+                // 创建圆形
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', '20');
+                circle.setAttribute('cy', '20');
+                circle.setAttribute('r', '8');
+                circle.setAttribute('fill', colorScale(dataPoint.userId));
+                
+                // 添加动画效果
+                circle.style.animation = 'pulse 1s infinite';
+                
+                svg.appendChild(circle);
+                dragImage.appendChild(svg);
+                
+                document.body.appendChild(dragImage);
+
+                // 设置初始位置
+                const rect = this.getBoundingClientRect();
+                dragImage.style.left = `${rect.left}px`;
+                dragImage.style.top = `${rect.top}px`;
+
+                // 存储拖拽缩略图引用
+                this._dragImage = dragImage;
+
                 const editView = document.querySelector('.edit-view');
                 if (editView) {
                   // 手动触发 dragenter 事件
@@ -425,6 +458,12 @@ const createOverviewChart = (data, container) => {
                 }
               })
               .on('drag', function(event, d) {
+                // 更新拖拽缩略图位置
+                if (this._dragImage) {
+                  this._dragImage.style.left = `${event.sourceEvent.clientX + 10}px`;
+                  this._dragImage.style.top = `${event.sourceEvent.clientY + 10}px`;
+                }
+
                 const editView = document.querySelector('.edit-view');
                 if (editView) {
                   const rect = editView.getBoundingClientRect();
@@ -456,6 +495,12 @@ const createOverviewChart = (data, container) => {
                 }
               })
               .on('end', function(event, d) {
+                // 移除拖拽缩略图
+                if (this._dragImage) {
+                  this._dragImage.remove();
+                  this._dragImage = null;
+                }
+
                 const editView = document.querySelector('.edit-view');
                 
                 // 创建并触发全局 dragend 事件
@@ -728,7 +773,7 @@ const createOverviewChart = (data, container) => {
             .attr('class', `outlier-line user-${userId} weekday-${weekday}`)
             .attr('d', outlierLine)
             .attr('fill', 'none')
-            .attr('stroke', colorScale(userId))
+            .attr('stroke', colorScale(Number(userId))) // 使用与异常点相同的颜色
             .attr('stroke-width', 1)
             .attr('stroke-opacity', 0.5)
             .attr('stroke-dasharray', '2,2')
@@ -1574,5 +1619,31 @@ watch(() => datasetStore.getSelectedUserId, (newUserId) => {
   color: #333;
   font-weight: 500;
   word-break: break-word;
+}
+
+/* 修改拖拽缩略图样式 */
+.drag-image {
+  position: fixed;
+  pointer-events: none;
+  z-index: 10000;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  transition: transform 0.1s ease;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 </style>
