@@ -151,40 +151,64 @@
     <!-- Action buttons -->
     <div class="flex gap-6 mr-6">
       <!-- 添加同步按钮 -->
-      <button
-        @click="handleSyncClick"
-        :disabled="isUpdating"
-        class="w-10 h-10 rounded-lg flex items-center justify-center bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-        title="sync"
+      <el-tooltip
+        content="Sync"
+        placement="bottom"
+        :show-after="100"
+        :hide-after="0"
       >
-        <img src="@/assets/sync.svg" alt="Sync" class="w-10 h-10" />
-      </button>
+        <button
+          @click="handleSyncClick"
+          :disabled="isUpdating"
+          class="w-10 h-10 rounded-lg flex items-center justify-center bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-all duration-200 hover:scale-105 hover:shadow-sm no-drag"
+        >
+          <img src="@/assets/sync.svg" alt="Sync" class="w-10 h-10 no-drag" />
+        </button>
+      </el-tooltip>
 
-      <button
-        class="w-10 h-10 rounded-lg flex items-center justify-center bg-white  text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-        :disabled="!timeSeriesStore.canUndo"
-        @click="timeSeriesStore.undo"
-        title="Undo"
+      <el-tooltip
+        content="Undo"
+        placement="bottom"
+        :show-after="100"
+        :hide-after="0"
       >
-        <img src="@/assets/undo.svg" alt="Undo" class="w-10 h-10" />
-      </button>
+        <button
+          class="w-10 h-10 rounded-lg flex items-center justify-center bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-all duration-200 hover:scale-105 hover:shadow-sm no-drag"
+          :disabled="!timeSeriesStore.canUndo"
+          @click="timeSeriesStore.undo"
+        >
+          <img src="@/assets/undo.svg" alt="Undo" class="w-10 h-10 no-drag" />
+        </button>
+      </el-tooltip>
 
-      <button
-        class="w-10 h-10 rounded-lg flex items-center justify-center bg-white  text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-        :disabled="!timeSeriesStore.canRedo"
-        @click="timeSeriesStore.redo"
-        title="Redo"
+      <el-tooltip
+        content="Redo"
+        placement="bottom"
+        :show-after="100"
+        :hide-after="0"
       >
-        <img src="@/assets/redo.svg" alt="Redo" class="w-10 h-10" />
-      </button>
+        <button
+          class="w-10 h-10 rounded-lg flex items-center justify-center bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-all duration-200 hover:scale-105 hover:shadow-sm no-drag"
+          :disabled="!timeSeriesStore.canRedo"
+          @click="timeSeriesStore.redo"
+        >
+          <img src="@/assets/redo.svg" alt="Redo" class="w-10 h-10 no-drag" />
+        </button>
+      </el-tooltip>
 
-      <button
-        class="w-10 h-10 rounded-lg flex items-center justify-center bg-white  text-gray-600 hover:bg-gray-50"
-        @click="exportEditHistory"
-        title="Export Edit History"
+      <el-tooltip
+        content="Export"
+        placement="bottom"
+        :show-after="100"
+        :hide-after="0"
       >
-        <img src="@/assets/export.svg" alt="Export" class="w-10 h-10" />
-      </button>
+        <button
+          class="w-10 h-10 rounded-lg flex items-center justify-center bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-all duration-200 hover:scale-105 hover:shadow-sm no-drag"
+          @click="exportEditHistory"
+        >
+          <img src="@/assets/export.svg" alt="Export" class="w-10 h-10 no-drag" />
+        </button>
+      </el-tooltip>
     </div>
   </nav>
 </template>
@@ -550,3 +574,22 @@ const convertDecimalHoursToHHMM = (decimalHours) => {
   return `${formattedHours}:${formattedMinutes}`;
 };
 </script> 
+
+<style scoped>
+/* 添加禁用拖拽的样式 */
+.no-drag {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+}
+
+.no-drag * {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+}
+</style>

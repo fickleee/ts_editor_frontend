@@ -752,7 +752,7 @@ const initialSeriesState = ref(null);
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-white">
+  <div class="h-screen flex flex-col bg-white no-drag">
     <div class="flex-1 flex flex-col overflow-hidden">
       <!-- Top section with editor -->
       <div class="h-[47.1%] flex overflow-hidden"
@@ -776,7 +776,7 @@ const initialSeriesState = ref(null);
                 :title="tool.name"
                 :disabled="selectionPending"
               >
-                <img :src="`/src/assets/${tool.icon}`" :alt="tool.name" class="w-[36px] h-[36px]" />
+                <img :src="`/src/assets/${tool.icon}`" :alt="tool.name" class="w-[36px] h-[36px]" draggable="false" />
               </button>
               
               <!-- 只在第1个和第3个按钮后添加分隔线 -->
@@ -1023,6 +1023,23 @@ const initialSeriesState = ref(null);
 <style scoped>
 [style*="border"] {
   border-style: solid;
+}
+
+/* 添加禁用拖拽的样式 */
+.no-drag {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+}
+
+.no-drag * {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
 }
 
 .toolbar {
