@@ -1031,7 +1031,6 @@ const initialSeriesState = ref(null);
   -khtml-user-drag: none;
   -moz-user-drag: none;
   -o-user-drag: none;
-  user-drag: none;
 }
 
 .no-drag * {
@@ -1039,7 +1038,6 @@ const initialSeriesState = ref(null);
   -khtml-user-drag: none;
   -moz-user-drag: none;
   -o-user-drag: none;
-  user-drag: none;
 }
 
 .toolbar {
