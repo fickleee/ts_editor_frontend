@@ -150,6 +150,15 @@
 
     <!-- Action buttons -->
     <div class="flex gap-6 mr-6">
+      <!-- 添加同步按钮 -->
+      <button
+        @click="handleSyncClick"
+        class="w-10 h-10 rounded-lg flex items-center justify-center bg-white  text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+        title="sync"
+        >
+        <img src="@/assets/sync.svg" alt="Sync" class="w-10 h-10" />
+      </button>
+
       <button
         class="w-10 h-10 rounded-lg flex items-center justify-center bg-white  text-gray-600 hover:bg-gray-50 disabled:opacity-50"
         :disabled="!timeSeriesStore.canUndo"
@@ -176,14 +185,7 @@
         <img src="@/assets/export.svg" alt="Export" class="w-10 h-10" />
       </button>
 
-      <!-- 添加同步按钮 -->
-      <button
-        @click="handleSyncClick"
-        class="ml-3 px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
-        title="同步数据到左侧"
-      >
-        Syn
-      </button>
+
     </div>
   </nav>
 </template>
@@ -223,13 +225,18 @@ const selectAggregation = (value) => {
 };
 
 const selectDataset = (dataset) => {
-  datasetStore.setDataset(dataset);
-  isOpen.value = false;
-  
   // 如果切换到非 capture 数据集，重置变量选择
   if (dataset !== 'capture') {
     selectedVariable.value = 'x';
   }
+  else{
+    datasetStore.setShowWeekday(true);
+    datasetStore.setShowWeekend(true);
+  }
+  datasetStore.setDataset(dataset);
+  isOpen.value = false;
+  
+
 };
 
 // 选择变量
@@ -323,6 +330,8 @@ const getOriginSeriesData = () => {
 
 // 同步按钮点击处理函数
 const handleSyncClick = () => {
+  console.time('sync-operation');
+  
   // 获取所有 origin 曲线
   const originSeries = getOriginSeriesData();
   
@@ -331,8 +340,8 @@ const handleSyncClick = () => {
     return;
   }
   
-  // 转换数据格式
-  const formattedData = originSeries.map(series => {
+  // 转换数据格式为 transData 格式
+  const transData = originSeries.map(series => {
     // 从ID中提取日期和用户ID
     let dateStr = '';
     let userId = series.id; // 默认保持原始ID
@@ -400,10 +409,17 @@ const handleSyncClick = () => {
     };
   });
   
+  console.time('update-store');
   // 更新到 store 以传递给左侧组件
-  timeSeriesStore.updateEditedSeriesData(formattedData);
+  timeSeriesStore.updateEditedSeriesData(transData);
+  // 设置传输数据并更新编辑后的数据
+  datasetStore.setTransData(transData);
+  datasetStore.updateEditedDataFromTrans();
+  console.timeEnd('update-store');
   
+  console.timeEnd('sync-operation');
   // 打印到控制台
-  console.log('同步到左侧的数据:', formattedData);
+  console.log('同步到左侧的数据:', transData);
+  console.log('左侧数据:', datasetStore.getEditedData);
 };
 </script> 

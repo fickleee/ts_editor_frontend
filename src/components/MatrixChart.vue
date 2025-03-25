@@ -849,7 +849,6 @@ const createLineChart = (data, container, allUserDataByWeek) => {
 
   // 计算所有数据的时间范围
   const timeRange = [0, data[0].res.length - 1];
-  
   // 计算所有用户的平均值
   const timePointCount = data[0].res.length;
   const avgValues = Array(timePointCount).fill(0);
@@ -1107,6 +1106,145 @@ const createLineChart = (data, container, allUserDataByWeek) => {
   });
 };
 
+// 添加工具函数：将原始数据按工作日聚合，采用10分钟采样
+const aggregateDataByWeekday = (originalData) => {
+  if (!originalData || !Array.isArray(originalData)) return [];
+
+  // 常量定义
+  const SAMPLE_INTERVAL = 10; // 10分钟一个采样点
+  const SAMPLES_PER_DAY = 24 * 60 / SAMPLE_INTERVAL; // 一天144个采样点
+
+  return originalData.map(user => {
+    if (!user.data || !Array.isArray(user.data)) return null;
+
+    // 初始化每个工作日的数据结构
+    const weekdayData = new Array(7).fill(null).map(() => {
+      return Array(SAMPLES_PER_DAY).fill(null).map(() => ({
+        values: [],
+        times: []
+      }));
+    });
+
+    // 遍历用户的每个数据点
+    user.data.forEach(point => {
+      if (!point.time || point.value === undefined) return;
+
+      // 解析时间
+      const date = new Date(point.time);
+      const weekday = date.getDay() === 0 ? 6 : date.getDay() - 1; // 0-6，0是周日
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+
+      // 计算当前时间点属于哪个10分钟采样区间
+      const sampleIndex = Math.floor((hours * 60 + minutes) / SAMPLE_INTERVAL);
+      
+      if (sampleIndex < SAMPLES_PER_DAY) {
+        weekdayData[weekday][sampleIndex].values.push(point.value);
+        weekdayData[weekday][sampleIndex].times.push(point.time);
+      }
+    });
+
+    // 构造最终的周数据格式
+    const weekly_data = weekdayData.map((dayData, weekday) => {
+      // 生成所有时间点的数据，包括没有值的时间点
+      const res = dayData.map((sample, index) => {
+        const hours = Math.floor((index * SAMPLE_INTERVAL) / 60);
+        const minutes = (index * SAMPLE_INTERVAL) % 60;
+        const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+        
+        if (sample.values.length > 0) {
+          const avgValue = sample.values.reduce((sum, val) => sum + val, 0) / sample.values.length;
+          return {
+            time: timeStr,
+            value: avgValue
+          };
+        }
+        
+        // 对于没有数据的时间点，返回 null 值
+        return {
+          time: timeStr,
+          value: null
+        };
+      });
+
+      return {
+        weekday,
+        res
+      };
+    });
+
+    return {
+      id: user.id,
+      weekly_data
+    };
+  }).filter(Boolean); // 过滤掉无效的用户数据
+};
+
+// 添加新的聚合函数来处理用户数据
+const aggregateUserData = (originalData) => {
+  if (!originalData || !Array.isArray(originalData)) return [];
+
+  // 常量定义
+  const SAMPLE_INTERVAL = 10; // 10分钟一个采样点
+  const MINUTES_PER_DAY = 24 * 60;
+  const SAMPLES_PER_DAY = MINUTES_PER_DAY / SAMPLE_INTERVAL; // 一天144个采样点
+
+  return originalData.map(user => {
+    if (!user.data || !Array.isArray(user.data)) return null;
+
+    // 初始化采样点数组
+    const sampledData = Array(SAMPLES_PER_DAY).fill(null).map(() => ({
+      values: [],
+      times: []
+    }));
+
+    // 遍历用户的每个数据点
+    user.data.forEach(point => {
+      if (!point.time || point.value === undefined) return;
+
+      // 解析时间
+      const date = new Date(point.time);
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+
+      // 计算当前时间点属于哪个10分钟采样区间
+      const sampleIndex = Math.floor((hours * 60 + minutes) / SAMPLE_INTERVAL);
+      
+      if (sampleIndex < SAMPLES_PER_DAY) {
+        sampledData[sampleIndex].values.push(point.value);
+        sampledData[sampleIndex].times.push(point.time);
+      }
+    });
+
+    // 生成最终的聚合数据
+    const res = sampledData.map((sample, index) => {
+      const hours = Math.floor((index * SAMPLE_INTERVAL) / 60);
+      const minutes = (index * SAMPLE_INTERVAL) % 60;
+      const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+
+      if (sample.values.length > 0) {
+        // 计算这个时间窗口内所有值的平均值
+        const avgValue = sample.values.reduce((sum, val) => sum + val, 0) / sample.values.length;
+        return {
+          time: timeStr,
+          value: avgValue
+        };
+      }
+
+      // 对于没有数据的时间点，返回 null 值
+      return {
+        time: timeStr,
+        value: null
+      };
+    });
+
+    return {
+      id: user.id,
+      res
+    };
+  }).filter(Boolean); // 过滤掉无效的用户数据
+};
+
 // 获取数据
 const fetchData = async () => {
   // 如果没有选择数据集，直接返回
@@ -1136,29 +1274,32 @@ const fetchData = async () => {
     }
     else {
       // 使用统一的reqDataMix接口替代三个独立接口
-      const mixResult = await reqDataMix(datasetStore.getCurrentDataset);
-      
+      // const mixResult = await reqDataMix(datasetStore.getCurrentDataset);
+      const res = await reqDataOriginal(datasetStore.getCurrentDataset);
       // 从混合结果中获取对应数据
-      allUserData.value = mixResult.preprocess;
-      allUserDataByWeek.value = mixResult.weekly;
-      originalData.value = mixResult.original;
-      datasetStore.setOriginalData(mixResult.original); // 存储到 store
+      // allUserData.value = mixResult.preprocess;
+      // allUserDataByWeek.value = mixResult.weekly;
+      // originalData.value = mixResult.original;
+      originalData.value = res;
+      // 使用原始数据计算周数据
+      allUserData.value = aggregateUserData(res);
+      allUserDataByWeek.value = aggregateDataByWeekday(res);
+      datasetStore.setOriginalData(res); // 存储到 store
     }
 
     // 等待下一个渲染周期，确保 DOM 更新完成
     await nextTick();
     
-    // 更新图表
+    // 更新图表，使用 editedData 而不是 originalData
     if (lineChart.value) {
-      createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
+      createLineChart(datasetStore.getEditedData, lineChart.value, allUserDataByWeek.value);
     }
     
-    // 更新概览图表
+    // 更新概览图表，使用 editedData
     if (overviewChart.value) {
-      createOverviewChart(originalData.value, overviewChart.value);
+      createOverviewChart(datasetStore.getEditedData, overviewChart.value);
     }
   } catch (error) {
-    console.error('Error fetching data:', error);
     ElMessage.error('获取数据失败');
   } finally {
     // 关闭 loading 状态
@@ -1185,10 +1326,8 @@ onMounted(() => {
       resizeObserver.observe(overviewChart.value);
     }
     
-    // // 添加拖拽事件监听器
-    // container.value?.addEventListener('outlier-drag-start', handleOutlierDragStart);
-    // container.value?.addEventListener('outlier-drag', handleOutlierDrag);
-    // container.value?.addEventListener('outlier-drag-end', handleOutlierDragEnd);
+    // 添加数据更新事件监听
+    window.addEventListener('data-updated', handleDataUpdate);
   }, 0);
 });
 
@@ -1200,11 +1339,25 @@ onUnmounted(() => {
     resizeObserver.unobserve(overviewChart.value);
   }
   
-  // // 移除事件监听器
-  // container.value?.removeEventListener('outlier-drag-start', handleOutlierDragStart);
-  // container.value?.removeEventListener('outlier-drag', handleOutlierDrag);
-  // container.value?.removeEventListener('outlier-drag-end', handleOutlierDragEnd);
+  // 移除事件监听
+  window.removeEventListener('data-updated', handleDataUpdate);
 });
+
+// 添加数据更新处理函数
+const handleDataUpdate = (event) => {
+  const { editedData } = event.detail;
+  allUserData.value = aggregateUserData(editedData);
+  allUserDataByWeek.value = aggregateDataByWeekday(editedData);
+  // 更新概览图表
+  if (overviewChart.value) {
+    createOverviewChart(editedData, overviewChart.value);
+  }
+  
+  // 更新折线图
+  if (lineChart.value) {
+    createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
+  }
+};
 
 // 监听数据集变化
 watch(() => datasetStore.getCurrentDataset, (newDataset) => {

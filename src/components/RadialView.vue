@@ -537,14 +537,15 @@ onUnmounted(() => {
   window.removeEventListener('resize', updateSliderWidth);
 });
 
-// 监听数据集变化
-watch(() => datasetStore.getCurrentDataset, async (newDataset) => {
-  if (newDataset) {
-    await fetchData();
-  } else {
-    data.value = [];
-  }
-}, { immediate: true });
+// // 监听数据集变化
+// watch(() => datasetStore.getCurrentDataset, (newDataset) => {
+//   if (newDataset) {
+//     data.value = aggregateDataForRadialView(datasetStore.getEditedData);
+//     // await fetchData();
+//   } else {
+//     data.value = [];
+//   }
+// }, { immediate: true });
 
 // 监听数据集变量变化
 watch(() => datasetStore.selectedVariable, async (newVariable) => {
@@ -588,8 +589,90 @@ watch([
   () => datasetStore.getShowWeekday,
   () => datasetStore.getShowWeekend
 ], async () => {
-  await fetchData();
+  // await fetchData();
+  data.value = aggregateDataForRadialView(datasetStore.getEditedData);
+  updateSliderRange();
 });
+
+watch(() => datasetStore.getEditedData, (newData) => {
+  if (newData) {
+    data.value = aggregateDataForRadialView(newData);
+    updateSliderRange();
+    createConcentricDonuts(data.value, chartContainer.value);
+  }
+}, { deep: true });
+
+const aggregateDataForRadialView = (editedData) => {
+  if (!editedData || !Array.isArray(editedData)) return [];
+
+  // 常量定义
+  const SAMPLE_INTERVAL = 10; // 10分钟一个采样点
+  const MINUTES_PER_DAY = 24 * 60;
+  const SAMPLES_PER_DAY = MINUTES_PER_DAY / SAMPLE_INTERVAL; // 一天144个采样点
+
+  return editedData.map(user => {
+    if (!user.data || !Array.isArray(user.data)) return null;
+
+    // 初始化采样点数组
+    const sampledData = Array(SAMPLES_PER_DAY).fill(null).map(() => ({
+      values: [],
+      times: []
+    }));
+
+    // 遍历用户的每个数据点
+    user.data.forEach(point => {
+      if (!point.time || point.value === undefined) return;
+
+      // 解析时间
+      const date = new Date(point.time);
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+      const weekday = date.getDay();
+
+      // 根据筛选条件过滤数据
+      const isWeekend = (weekday === 0 || weekday === 6);
+      if ((isWeekend && !datasetStore.getShowWeekend) || (!isWeekend && !datasetStore.getShowWeekday)) {
+        return;
+      }
+
+      // 计算当前时间点属于哪个10分钟采样区间
+      const sampleIndex = Math.floor((hours * 60 + minutes) / SAMPLE_INTERVAL);
+      
+      if (sampleIndex < SAMPLES_PER_DAY) {
+        sampledData[sampleIndex].values.push(point.value);
+        sampledData[sampleIndex].times.push(point.time);
+      }
+    });
+
+    // 生成最终的聚合数据
+    const res = sampledData.map((sample, index) => {
+      const hours = Math.floor((index * SAMPLE_INTERVAL) / 60);
+      const minutes = (index * SAMPLE_INTERVAL) % 60;
+      const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+
+      if (sample.values.length > 0) {
+        // 计算这个时间窗口内所有值的平均值
+        const avgValue = sample.values.reduce((sum, val) => sum + val, 0) / sample.values.length;
+        return {
+          time: timeStr,
+          value: avgValue
+        };
+      }
+
+      // 对于没有数据的时间点，返回 null 值
+      return {
+        time: timeStr,
+        value: null
+      };
+    });
+
+    return {
+      id: user.id,
+      res
+    };
+  }).filter(Boolean); // 过滤掉无效的用户数据
+};
+
 
 // 布局选项
 const layoutOptions = [
