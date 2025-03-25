@@ -5,6 +5,30 @@ import { BORDER_WIDTH, BORDER_COLOR } from './utils/constants';
 import MatrixChart from './components/MatrixChart.vue';
 import NavBar from './components/NavBar.vue';
 import RadialView from './components/RadialView.vue';
+import { THEME_COLOR, THEME_COLOR_LIGHT } from '@/utils/constants';
+import { ref, onMounted, onUnmounted } from 'vue';
+import { useDatasetStore } from './stores/datasetStore';
+
+// 添加loading状态
+const datasetStore = useDatasetStore();
+const isLeftSideLoading = ref(false);
+
+// 组件挂载后添加事件监听
+onMounted(() => {
+  // 监听MatrixChart组件的loading状态变化事件
+  window.addEventListener('matrix-loading-changed', handleMatrixLoadingChanged);
+});
+
+// 组件卸载前移除事件监听
+onUnmounted(() => {
+  window.removeEventListener('matrix-loading-changed', handleMatrixLoadingChanged);
+});
+
+// 处理MatrixChart组件loading状态变化的函数
+const handleMatrixLoadingChanged = (event) => {
+  const { loading } = event.detail;
+  isLeftSideLoading.value = loading;
+};
 </script>
 
 <template>
@@ -12,11 +36,26 @@ import RadialView from './components/RadialView.vue';
     <NavBar />
 
     <div class="flex flex-1 overflow-hidden">
-      <aside class="w-[40%] flex flex-col" 
+      <aside class="w-[40%] flex flex-col relative" 
             :style="{
               borderRightWidth: `${BORDER_WIDTH}px`,
               borderColor: BORDER_COLOR
             }">
+        
+        <!-- 统一的loading遮罩 -->
+        <div v-if="isLeftSideLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
+          <div class="flex flex-col items-center gap-2">
+            <div 
+              :style="{
+                '--theme-color-light': THEME_COLOR_LIGHT,
+                '--theme-color': THEME_COLOR
+              }"
+              class="w-8 h-8 border-4 border-[var(--theme-color-light)] border-t-[var(--theme-color)] rounded-full animate-spin"
+            ></div>
+            <span :style="{ color: THEME_COLOR }" class="text-sm font-semibold">loading...</span>
+          </div>
+        </div>
+        
         <div class="flex-1 bg-white" 
             :style="{
               borderBottomWidth: `${BORDER_WIDTH}px`,

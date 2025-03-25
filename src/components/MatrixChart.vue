@@ -13,25 +13,11 @@
         </div>
       </el-scrollbar>
     </div>
-
-    <!-- 全局加载动画 -->
-    <div v-if="isLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
-      <div class="flex flex-col items-center gap-2">
-        <div 
-          :style="{
-            '--theme-color-light': THEME_COLOR_LIGHT,
-            '--theme-color': THEME_COLOR
-          }"
-          class="w-8 h-8 border-4 border-[var(--theme-color-light)] border-t-[var(--theme-color)] rounded-full animate-spin"
-        ></div>
-        <span :style="{ color: THEME_COLOR }" class="text-sm font-semibold">loading...</span>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, provide } from 'vue';
 import * as d3 from 'd3';
 import { reqDataDay, reqDataOriginal, reqDataAllUserWeek, reqDataDayMultiple, reqDataOriginalMultiple, reqDataMix } from '@/api';
 import { useDatasetStore } from '../stores/datasetStore';
@@ -51,8 +37,19 @@ const datasetStore = useDatasetStore();
 // 修改用户条带高度的定义
 const userStripHeight = MATRIX_CHART.USER_STRIP_HEIGHT;
 
-// 修改 loading 状态管理
+// 恢复loading状态管理
 const isLoading = ref(false);
+
+// 将loading状态提供给父组件
+provide('matrixLoading', isLoading);
+
+// 监控loading状态变化并发送事件
+watch(isLoading, (newValue) => {
+  // 发送自定义事件，App.vue可以监听此事件
+  window.dispatchEvent(new CustomEvent('matrix-loading-changed', {
+    detail: { loading: newValue }
+  }));
+});
 
 // 创建概览图表 - 使用box plot展示所有用户和天数的数据分布
 const createOverviewChart = (data, container) => {
@@ -1257,7 +1254,7 @@ const fetchData = async () => {
   }
 
   try {
-    // 设置统一的 loading 状态
+    // 设置loading状态
     isLoading.value = true;
 
     if (datasetStore.getCurrentDataset === 'capture') {
@@ -1302,7 +1299,7 @@ const fetchData = async () => {
   } catch (error) {
     ElMessage.error('获取数据失败');
   } finally {
-    // 关闭 loading 状态
+    // 关闭loading状态
     isLoading.value = false;
   }
 };
@@ -1368,6 +1365,7 @@ watch(() => datasetStore.getCurrentDataset, (newDataset) => {
     // 当数据集被清空时，清空现有数据
     allUserData.value = [];
     originalData.value = [];
+    datasetStore.setOriginalData([]); // 清空 store 中的数据
   }
 }, { immediate: true });
 

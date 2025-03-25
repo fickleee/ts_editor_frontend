@@ -547,12 +547,12 @@ onUnmounted(() => {
 //   }
 // }, { immediate: true });
 
-// 监听数据集变量变化
-watch(() => datasetStore.selectedVariable, async (newVariable) => {
-  if (datasetStore.getCurrentDataset === 'capture' && newVariable) {
-    await fetchData();
-  }
-});
+// // 监听数据集变量变化  （不需要了， variable变化会引起editedData变化，从而触发watch(data)，不过由于平均和直接采样不一样，结果略有差别）
+// watch(() => datasetStore.selectedVariable, async (newVariable) => {
+//   if (datasetStore.getCurrentDataset === 'capture' && newVariable) {
+//     await fetchData();
+//   }
+// });
 
 // 监听数据变化
 watch(data, async (newData) => {
@@ -588,8 +588,7 @@ watch(() => datasetStore.getSelectedUserId, (newUserId) => {
 watch([
   () => datasetStore.getShowWeekday,
   () => datasetStore.getShowWeekend
-], async () => {
-  // await fetchData();
+], () => {
   data.value = aggregateDataForRadialView(datasetStore.getEditedData);
   updateSliderRange();
 });
