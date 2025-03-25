@@ -1,12 +1,14 @@
 <script setup>
 import { ref, computed, onMounted, watch, onUnmounted, nextTick } from 'vue'
 import { useTimeSeriesStore } from '../stores/timeSeriesStore'
+import { useDatasetStore } from '../stores/datasetStore'
 import TimeSeriesChart from './TimeSeriesChart.vue'
 import TimeSeriesView from './TimeSeriesView.vue'
 import CurveEditor from './CurveEditor.vue'
 import { ElMessage } from 'element-plus'
 import { BORDER_WIDTH, BORDER_COLOR } from '../utils/constants'
 import { generateHouseData } from '../utils/generateData'
+import PatternChart from './PatternChart.vue'
 
 const store = useTimeSeriesStore()
 
@@ -94,8 +96,30 @@ const selectTool = (toolId) => {
       store.expandTimeSeries(selections.value)
     } else if (toolId === 'removal' && store.selectedTimeRange && selectedSeriesId.value) {
       generatePatterns.value = store.findSimilarPatterns(selectedSeriesId.value)
+      
+      // 获取数据集并输出到控制台
+      const datasetStore = useDatasetStore()
+      const fullDataset = datasetStore.getOriginalData
+      console.log('完整数据集:', fullDataset)
+      console.log('生成的匹配模式:', generatePatterns.value)
+      
       return
+    } else if ((toolId === 'move-x' || toolId === 'move-y') && initialSeriesState.value) {
+      const finalState = store.getSeriesSnapshot(
+        selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries
+      );
+      
+      store.recordBatchOperation(
+        toolId, 
+        selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries,
+        { type: toolId }, 
+        initialSeriesState.value, 
+        finalState
+      );
+      
+      initialSeriesState.value = null;
     }
+    
     activeTool.value = null
     tools.value.forEach(tool => tool.active = false)
     isMultiSelect.value = false
@@ -115,6 +139,14 @@ const selectTool = (toolId) => {
     previewCurve.value = null
     selectedPattern.value = null
     store.clearPreviewSeries()
+    
+    if (toolId === 'move-x' || toolId === 'move-y') {
+      if (store.selectedTimeRange) {
+        initialSeriesState.value = store.getSeriesSnapshot(
+          selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries
+        );
+      }
+    }
   }
 
   tools.value.forEach(tool => tool.active = tool.id === toolId)
@@ -265,14 +297,14 @@ const handleChartDrag = (timeRange, valueRange, dragPoint) => {
         }
         
         if (selectedSeriesId.value) {
-          store.moveSeries(selectedSeriesId.value, { x: offset * 0.0005, y: 0 })
+          store.moveSeriesWithoutRecord(selectedSeriesId.value, { x: offset * 0.0005, y: 0 })
           store.setSelection({
             start: store.selectedTimeRange.start + offset * 0.0005,
             end: store.selectedTimeRange.end + offset * 0.0005
           }, [selectedSeriesId.value])
         } else {
           store.selectedSeries.forEach(id => {
-            store.moveSeries(id, { x: offset * 0.0005, y: 0 })
+            store.moveSeriesWithoutRecord(id, { x: offset * 0.0005, y: 0 })
           })
           store.setSelection({
             start: store.selectedTimeRange.start + offset * 0.0005,
@@ -290,14 +322,12 @@ const handleChartDrag = (timeRange, valueRange, dragPoint) => {
         }
         
         if (selectedSeriesId.value) {
-          // 使用动态灵敏度系数
           const dynamicSensitivity = calculateDynamicSensitivity(selectedSeriesId.value);
-          store.moveSeries(selectedSeriesId.value, { x: 0, y: offset * dynamicSensitivity })
+          store.moveSeriesWithoutRecord(selectedSeriesId.value, { x: 0, y: offset * dynamicSensitivity })
         } else {
-          // 多序列情况下，为每个序列单独计算灵敏度
           store.selectedSeries.forEach(id => {
             const dynamicSensitivity = calculateDynamicSensitivity(id);
-            store.moveSeries(id, { x: 0, y: offset * dynamicSensitivity })
+            store.moveSeriesWithoutRecord(id, { x: 0, y: offset * dynamicSensitivity })
           })
         }
       }
@@ -716,6 +746,9 @@ const debouncedUpdateChart = debounce(() => {
 watch(() => store.series, () => {
   debouncedUpdateChart();
 }, { deep: true });
+
+// Add a new ref to store initial series state
+const initialSeriesState = ref(null);
 </script>
 
 <template>
@@ -729,7 +762,7 @@ watch(() => store.series, () => {
            }">
         <!-- Toolbar -->
         <div class="w-[65px] flex-none flex flex-col items-center">
-          <div class="toolbar flex flex-col items-center gap-4 mt-4 ml-1">
+          <div class="toolbar flex flex-col items-center gap-4 mt-4 ml-2">
             <!-- 循环生成按钮和分隔线 -->
             <template v-for="(tool, index) in tools" :key="tool.id">
               <button
@@ -886,17 +919,8 @@ watch(() => store.series, () => {
                       <div class="flex justify-between items-center mb-2">
                         <div class="text-sm text-gray-600">
                           <span class="mr-2">Source: {{ pattern.sourceName }}</span>
-                          <span v-if="pattern.sourceType !== 'original'" 
-                                :class="`px-1 py-0.5 text-xs rounded ${
-                                  pattern.sourceType === 'LF' ? 'bg-yellow-100 text-yellow-800' : 
-                                  pattern.sourceType === 'MF' ? 'bg-pink-100 text-pink-800' : 
-                                  'bg-indigo-100 text-indigo-800'
-                                }`"
-                          >
-                            {{ pattern.sourceType }}
-                          </span>
                         </div>
-                        <div class="text-sm text-purple-600">
+                        <div class="text-sm text-purple-600 font-semibold">
                           Similarity: {{ (pattern.similarity * 100).toFixed(1) }}%
                         </div>
                       </div>
@@ -904,15 +928,9 @@ watch(() => store.series, () => {
                         Time range: {{ formatTime(pattern.start) }} - {{ formatTime(pattern.end) }}
                       </div>
                       <div class="h-[90px]">
-                        <TimeSeriesChart
-                          :series="[{ id: 'preview', data: pattern.data, type: 'original', visible: true, color: pattern.color }]"
+                        <PatternChart
+                          :pattern="pattern"
                           :height="90"
-                          :showGrid="true"
-                          :showTimeAxis="false"
-                          :isMainChart="false"
-                          :isGeneratePreview="true"
-                          :showAxisLabels="true"
-                          :gridDensity="'normal'"
                         />
                       </div>
                     </div>
@@ -1039,5 +1057,34 @@ watch(() => store.series, () => {
 
 :deep(.el-scrollbar__view) {
   padding-bottom: 20px;
+}
+
+/* 添加到现有样式中 */
+.pattern-list-item {
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.pattern-list-item:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.pattern-list-item.selected {
+  border-color: #8367F8;
+  background-color: rgba(131, 103, 248, 0.05);
+}
+
+.similarity-badge {
+  font-weight: 600;
+  color: #8367F8;
+}
+
+.time-range {
+  color: #6B7280;
+  font-size: 0.875rem;
+}
+
+.source-name {
+  font-weight: 500;
 }
 </style>

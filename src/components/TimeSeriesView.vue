@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
+import SeriesViewChart from './SeriesViewChart.vue'
 import TimeSeriesChart from './TimeSeriesChart.vue'
 import { downloadCSV } from '../utils/csvUtils'
 import { api } from '../services/api'
@@ -298,7 +299,7 @@ const getChildSeries = computed(() => {
   >
     <div class="flex items-center gap-2 mb-2">
       <!-- 类型标签在左上角 -->
-      <span :class="getTypeClass(series.type)" class="font-bold ml-[60px]">
+      <span :class="getTypeClass(series.type)" class="font-bold ml-[100px]">
         {{ series.type || 'original' }}
       </span>
       <span class="text-sm text-gray-500">{{ series.id }}</span>
@@ -335,11 +336,11 @@ const getChildSeries = computed(() => {
     <!-- 显示框中的控制按钮区域 -->
     <div class="flex relative h-[70px]">
       <!-- 左侧控件空间 -->
-      <div class="w-[60px] flex-none flex flex-row justify-center items-center gap-2">
-        <!-- 可视标记按钮 -->
+      <div class="w-[105px] flex-none flex flex-row items-center relative">
+        <!-- 可视标记按钮 - 减少右边距，将其向左移动 -->
         <button 
           @click.stop="toggleVisibility" 
-          class="p-2 rounded hover:bg-gray-100"
+          class="p-2 rounded hover:bg-gray-100 mr-[20px] ml-[-10px]"
           title="Toggle visibility in main view"
         >
           <span v-if="series.visible" class="text-gray-800">
@@ -359,28 +360,57 @@ const getChildSeries = computed(() => {
         <button 
           v-if="series.type === 'original'"
           @click.stop="toggleDecomposition" 
-          class="mr-6 p-2 rounded hover:bg-gray-100"
+          class="p-2 rounded hover:bg-gray-100"
           title="Decompose series"
         >
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M0.432918 4.0408L0.183382 4.38749C0.0820015 4.53105 -0.0037871 4.73068 0.000129001 4.95479C0.000129001 5.18241 0.0820016 5.42053 0.24188 5.66216C0.475824 6.01234 0.893047 6.38353 1.54811 6.76174L7.0732 10.1235L7.00303 7.46562L0.432966 4.04078L0.432918 4.0408ZM16.4389 14.7635L16.4467 14.767C16.8366 14.9806 17.1915 15.1207 17.5697 15.1487C17.9479 15.1767 18.3105 15.0717 18.6224 14.9036C19.2073 14.5919 19.7337 14.1262 19.9247 13.4643C20.1158 12.8024 19.9481 12.025 19.3633 11.1461C19.3594 11.1356 19.3516 11.125 19.3477 11.1145C18.7628 10.2321 17.9752 9.76983 17.1524 9.68577C16.3258 9.59821 15.5343 9.83984 14.8013 10.148C14.2827 10.3721 13.9044 10.5402 13.6042 10.5963C13.304 10.6453 13.07 10.6348 12.645 10.4492L11.4597 9.82934L11.5143 11.934L16.4389 14.7635L16.4389 14.7635ZM17.1563 11.1951C18.1779 11.7519 18.5054 12.9425 17.8855 13.86L14.1891 11.8535C14.8052 10.936 16.1347 10.6418 17.1563 11.1951ZM8.31309 12.757C8.29359 13.1772 8.19223 13.3698 8.00117 13.5799C7.80232 13.79 7.4553 14.0071 6.98739 14.3083C6.33622 14.739 5.71626 15.2468 5.40434 15.9401C5.0885 16.637 5.17039 17.488 5.77087 18.3809C6.34795 19.2634 7.0264 19.7712 7.76722 19.9393C8.50416 20.1038 9.21382 19.9147 9.79479 19.6031C10.1145 19.435 10.3875 19.2004 10.5434 18.8887C10.6955 18.577 10.7306 18.2303 10.7111 17.8241L10.7072 17.8171L10.2783 12.1581L10.251 11.8219C10.2354 11.6503 10.3797 11.5033 10.5707 11.4892C10.598 11.4892 10.6214 11.4927 10.6487 11.4963H10.6604L10.5083 5.9423L10.0911 2.21631C10.0326 1.51593 9.87279 1.01168 9.63885 0.657979C9.48289 0.416349 9.28793 0.237764 9.06566 0.129193C8.84731 0.0206438 8.61337 -0.0108789 8.42231 0.00312395L7.9622 0.0311296L8.26243 10.8974L8.31312 12.7569L8.31309 12.757ZM8.98374 14.5989L9.13971 18.4755C7.94656 18.514 6.94448 17.6771 6.90549 16.609C6.86261 15.5374 7.79449 14.6374 8.98374 14.5989Z" fill="black"/>
           </svg>
         </button>
+        
+        <!-- 子序列箭头 - 保持水平箭头位置，进一步延长垂直线 -->
+        <div v-if="['hf', 'mf', 'high_freq', 'mid_freq'].includes(series.type)" 
+          class="ml-auto mr-4" style="position: absolute; right: 4px; z-index: 10;">
+          
+          <!-- 垂直线SVG - 从顶部到箭头位置 -->
+          <svg width="24" height="50" viewBox="0 0 24 50" fill="none" xmlns="http://www.w3.org/2000/svg"
+            style="position: absolute; top: -35px; right: 0;">
+            <path d="M1.5 0L1.5 35" stroke="black" stroke-width="2"/>
+          </svg>
+
+          <!-- 向右箭头 (HF和MF) - 增加垂直线长度 -->
+          <svg width="24" height="112" viewBox="0 0 24 112" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- 将垂直线的起点进一步向上延伸 -->
+            <path d="M1.5 -100L1.5 108" stroke="black" stroke-width="2"/>
+            <path d="M23.7071 60.2071C24.0976 59.8166 24.0976 59.1834 23.7071 58.7929L17.3431 52.4289C16.9526 52.0384 16.3195 52.0384 15.9289 52.4289C15.5384 52.8195 15.5384 53.4526 15.9289 53.8431L21.5858 59.5L15.9289 65.1569C15.5384 65.5474 15.5384 66.1805 15.9289 66.5711C16.3195 66.9616 16.9526 66.9616 17.3431 66.5711L23.7071 60.2071ZM2 60.5H23V58.5H2V60.5Z" fill="black"/>
+          </svg>
+        </div>
+        
+        <div v-if="['lf', 'low_freq'].includes(series.type)" 
+        class="ml-auto mr-4" style="position: absolute; right: 4px; z-index: 10;">
+          
+          <!-- 垂直线SVG - 从顶部到箭头位置 -->
+          <svg width="24" height="54" viewBox="0 0 24 54" fill="none" xmlns="http://www.w3.org/2000/svg"
+            style="position: absolute; top: -54px; right: 0;">
+            <path d="M1.5 0L1.5 54" stroke="black" stroke-width="2"/>
+          </svg>
+          <!-- 向右下箭头 (LF) - 调整高度和位置 -->
+          <svg width="24" height="75" viewBox="0 0 24 75" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1.5 0L1.5 45.5" stroke="black" stroke-width="2"/>
+            <path d="M1.5 44.5C0.947715 44.5 0.5 44.9477 0.5 45.5C0.5 46.0523 0.947715 46.5 1.5 46.5V44.5ZM23.2071 46.2071C23.5976 45.8166 23.5976 45.1834 23.2071 44.7929L16.8431 38.4289C16.4526 38.0384 15.8195 38.0384 15.4289 38.4289C15.0384 38.8195 15.0384 39.4526 15.4289 39.8431L21.0858 45.5L15.4289 51.1569C15.0384 51.5474 15.0384 52.1805 15.4289 52.5711C15.8195 52.9616 16.4526 52.9616 16.8431 52.5711L23.2071 46.2071ZM1.5 46.5H22.5V44.5H1.5V46.5Z" fill="black"/>
+          </svg>
+        </div>
       </div>
       
-      <!-- 图表容器，确保与下方时间轴对齐 -->
-      <div class="flex-1 relative pr-1" style="height: 70px">
-        <!-- 始终显示曲线，不受可见性影响 -->
-        <TimeSeriesChart
-          :series="[{...series, visible: true}]"
+      <!-- 图表容器，使用新的SeriesViewChart组件 -->
+      <div class="flex-1 relative" style="height: 70px">
+        <!-- 替换为新组件 -->
+        <SeriesViewChart
+          :series="series"
           :height="70"
-          :showGrid="false"
-          :isMainChart="false"
-          :showTimeAxis="false"
           :hoverTime="hoverTime"
-          :timeAxisConfig="timeAxisConfig"
           :isSelected="isSelected"
-          :selectedSeriesId="isSelected ? series.id : null"
+          :timeAxisConfig="timeAxisConfig"
         />
       </div>
       
@@ -388,7 +418,7 @@ const getChildSeries = computed(() => {
     </div>
 
     <!-- 分解设置面板 -->
-    <div v-if="showDecomposition" class="mt-4 p-2 bg-white rounded-lg" style="margin-left: 60px">
+    <div v-if="showDecomposition" class="mt-4 p-2 bg-white rounded-lg" style="margin-left: 105px">
       <div class="flex flex-wrap items-center gap-8 px-2 py-1">
         <!-- 分解数量选择 -->
         <div class="relative">
@@ -533,6 +563,21 @@ const getChildSeries = computed(() => {
 }
 
 .time-series-tag.hf {
+  background-color: #E9DFFF;
+  color: #6548C7;
+}
+
+.time-series-tag.low_freq {
+  background-color: #F5F1FF;
+  color: #8367F8;
+}
+
+.time-series-tag.mid_freq {
+  background-color: #F4ECFF;
+  color: #9B71F6;
+}
+
+.time-series-tag.high_freq {
   background-color: #E9DFFF;
   color: #6548C7;
 }

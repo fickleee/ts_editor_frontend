@@ -3,12 +3,13 @@ import { ref, computed } from 'vue'
 import * as d3 from 'd3'
 import { generateHouseData } from '../utils/generateData'
 import { ElMessage } from 'element-plus'
+import { useDatasetStore } from './datasetStore'
 
 export const useTimeSeriesStore = defineStore('timeSeries', () => {
   const series = ref([])
-  const history = ref([])
-  const historyIndex = ref(-1)
-  const maxHistory = 50
+  const operations = ref([])
+  const operationIndex = ref(-1)
+  const maxOperations = 100
 
   const selectedTimeRange = ref(null)
   const selectedSeries = ref([])
@@ -19,14 +20,12 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     end: 24
   });
 
-  // 添加用于存储从右侧发送到左侧的数据
   const editedSeriesData = ref([]);
 
   const initializeData = () => {
-    // Generate data for three consecutive days
     const defaultSeries = ['Default 1', 'Default 2', 'Default 3']
     defaultSeries.forEach((name, index) => {
-      const data = generateHouseData(1) // Generate one day of data
+      const data = generateHouseData(1)
       addSeries({
         id: name,
         data,
@@ -37,19 +36,16 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   }
 
   const addSeries = (newSeries) => {
-    // 检查系列是否已经存在
     const existingSeries = series.value.find(s => s.id === newSeries.id);
     if (!existingSeries) {
       series.value.push(newSeries);
     } else {
-      // 更新已存在的系列
       Object.assign(existingSeries, newSeries);
     }
     saveState()
   }
 
   const saveState = () => {
-    // 在保存前检查所有序列的数据点数量
     series.value.forEach(s => {
       if (s.data.length !== 1440) {
         console.warn(`Series ${s.id} has ${s.data.length} points, fixing...`);
@@ -57,14 +53,23 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       }
     });
     
-    if (historyIndex.value < history.value.length - 1) {
-      history.value = history.value.slice(0, historyIndex.value + 1)
+    if (operationIndex.value < operations.value.length - 1) {
+      operations.value = operations.value.slice(0, operationIndex.value + 1)
     }
-    history.value.push(JSON.parse(JSON.stringify(series.value)))
-    if (history.value.length > maxHistory) {
-      history.value.shift()
+    operations.value.push({
+      id: Date.now() + Math.random().toString(36).substring(2, 9),
+      timestamp: new Date().toISOString(),
+      type: 'save',
+      seriesIds: series.value.map(s => s.id),
+      timeRange: selectedTimeRange.value ? { ...selectedTimeRange.value } : null,
+      params: {},
+      beforeData: null,
+      afterData: JSON.parse(JSON.stringify(series.value))
+    })
+    if (operations.value.length > maxOperations) {
+      operations.value.shift()
     }
-    historyIndex.value = history.value.length - 1
+    operationIndex.value = operations.value.length - 1
   }
 
   const setSelection = (timeRange, seriesIds) => {
@@ -86,7 +91,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const { start, end } = selectedTimeRange.value
     const duration = end - start
 
-    // Create preview series with pattern data adjusted to selection range
     const previewData = pattern.data.map(point => {
       const normalizedTime = (point.time - pattern.start) / (pattern.end - pattern.start)
       const newTime = start + normalizedTime * duration
@@ -114,24 +118,23 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const seriesIndex = series.value.findIndex(s => s.id === seriesId)
     if (seriesIndex === -1) return
 
-    // 获取当前序列
+    const beforeData = getSeriesSnapshot([seriesId])
+    
+    const operationType = offset.x !== 0 && offset.y === 0 ? 'move-x' : 
+                         offset.x === 0 && offset.y !== 0 ? 'move-y' : 'move-xy'
+
     const currentSeries = series.value[seriesIndex]
     const { start, end } = selectedTimeRange.value
 
-    // 检查这个序列是否有子序列
     const hasChildren = series.value.some(s => s.parentId === seriesId)
 
-    // 如果是子序列，需要更新父序列
     if (currentSeries.parentId) {
       const parentIndex = series.value.findIndex(s => s.id === currentSeries.parentId)
       if (parentIndex !== -1) {
-        // 获取所有子序列
         const childSeries = series.value.filter(s => s.parentId === currentSeries.parentId)
         
-        // 创建父序列的新数据
         const newParentData = JSON.parse(JSON.stringify(series.value[parentIndex].data))
         
-        // 更新当前子序列的数据
         const newData = JSON.parse(JSON.stringify(currentSeries.data))
         
         newData.forEach((point, i) => {
@@ -143,11 +146,9 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
           }
         })
         
-        // 更新父序列数据（所有子序列之和）
         newParentData.forEach((point, i) => {
           if (point) {
-            point.value = 0; // 重置为0
-            // 累加所有子序列的值
+            point.value = 0;
             childSeries.forEach(child => {
               const childData = child.id === seriesId ? newData : child.data;
               if (childData[i] && childData[i].time === point.time) {
@@ -157,7 +158,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
           }
         })
         
-        // 更新子序列和父序列
         series.value[seriesIndex] = {
           ...currentSeries,
           data: newData
@@ -169,13 +169,10 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         }
       }
     } else {
-      // 是原始序列或父序列
-      // 如果有子序列，提示用户但仍允许编辑
       if (hasChildren) {
         ElMessage.warning('Warning: Modifying the parent series will break consistency with child series')
       }
       
-      // 正常编辑序列
       const newData = JSON.parse(JSON.stringify(currentSeries.data))
       
       newData.forEach((point, i) => {
@@ -187,7 +184,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         }
       })
       
-      // 排序数据
       newData.sort((a, b) => a.time - b.time)
       
       series.value[seriesIndex] = {
@@ -196,9 +192,10 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       }
     }
 
-    // 在保存前确保数据点数量正确
     series.value[seriesIndex].data = ensureDataPoints(series.value[seriesIndex].data);
-    saveState()
+    
+    const afterData = getSeriesSnapshot([seriesId])
+    recordOperation(operationType, seriesId, { offset }, beforeData, afterData);
   }
 
   const applyCurve = (seriesId, curve) => {
@@ -207,21 +204,18 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const seriesIndex = series.value.findIndex(s => s.id === seriesId)
     if (seriesIndex === -1) return
 
-    // 复制数据避免直接修改
+    const beforeData = getSeriesSnapshot([seriesId])
+
     const newData = JSON.parse(JSON.stringify(series.value[seriesIndex].data))
     const { start, end } = selectedTimeRange.value
     const duration = end - start
 
-    // 对选中范围内的每个数据点应用曲线
     newData.forEach((point, i) => {
       if (point.time >= start && point.time <= end) {
-        // 计算当前点在选择范围内的相对位置（0-1）
         const relativePosition = (point.time - start) / duration
         
-        // 使用曲线在该位置的 y 值作为乘数
         const multiplier = interpolateCurveAtPosition(curve, relativePosition)
         
-        // 应用乘数到原始值
         newData[i] = {
           time: point.time,
           value: point.value * multiplier
@@ -229,23 +223,20 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       }
     })
 
-    // 更新数据
     series.value[seriesIndex] = {
       ...series.value[seriesIndex],
       data: newData
     }
 
-    // 在保存前确保数据点数量正确
     series.value[seriesIndex].data = ensureDataPoints(series.value[seriesIndex].data);
-    saveState()
+    
+    const afterData = getSeriesSnapshot([seriesId])
+    recordOperation('curve', seriesId, { curve }, beforeData, afterData);
   }
 
-  // 根据相对位置插值曲线值
   const interpolateCurveAtPosition = (curve, position) => {
-    // 确保位置在0-1范围内
     position = Math.max(0, Math.min(1, position))
     
-    // 找到位置两侧的控制点
     let leftIndex = 0
     let rightIndex = curve.length - 1
     
@@ -257,11 +248,9 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       }
     }
     
-    // 如果位置恰好在控制点上，直接返回该点的 y 值
     if (curve[leftIndex].x === position) return curve[leftIndex].y
     if (curve[rightIndex].x === position) return curve[rightIndex].y
     
-    // 否则线性插值
     const t = (position - curve[leftIndex].x) / (curve[rightIndex].x - curve[leftIndex].x)
     return curve[leftIndex].y + t * (curve[rightIndex].y - curve[leftIndex].y)
   }
@@ -269,7 +258,8 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   const expandTimeSeries = (selections) => {
     if (!selections || selections.length === 0) return;
     
-    // 计算总时长和缩放因子
+    const beforeData = getSeriesSnapshot(selectedSeries.value);
+    
     const totalSelectedTime = selections.reduce((sum, sel) => sum + (sel.end - sel.start), 0);
     const scaleFactor = 24 / totalSelectedTime;
     
@@ -278,27 +268,23 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       if (seriesIndex === -1) return;
       
       const originalData = series.value[seriesIndex].data;
-      const newData = new Array(1440); // 24小时 * 60分钟 = 1440个点
+      const newData = new Array(1440);
       
-      // 初始化每分钟的时间点
       for (let i = 0; i < 1440; i++) {
         const hour = i / 60;
         newData[i] = {
           time: parseFloat(hour.toFixed(2)),
-          value: null // 先初始化为null，后面会填充实际值
+          value: null
         };
       }
       
-      // 处理选中的片段
       let currentTime = 0;
       
-      // 辅助函数：在两点之间进行线性插值
       const interpolate = (time, p1, p2) => {
         const t = (time - p1.time) / (p2.time - p1.time);
         return p1.value + t * (p2.value - p1.value);
       };
       
-      // 辅助函数：获取某个时间点的插值结果
       const getValueAtTime = (time, data) => {
         const points = data.filter(p => p && !isNaN(p.time) && !isNaN(p.value));
         if (points.length === 0) return null;
@@ -311,7 +297,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         return interpolate(time, points[i - 1], points[i]);
       };
       
-      // 处理每个选中片段
       selections.forEach((selection, index) => {
         const segmentData = originalData.filter(
           point => point && !isNaN(point.time) && !isNaN(point.value) &&
@@ -320,19 +305,15 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         
         if (segmentData.length === 0) return;
         
-        // 计算这个片段应该占用的时间范围
         const segmentDuration = (selection.end - selection.start) * scaleFactor;
         const segmentEndTime = currentTime + segmentDuration;
         
-        // 为这个片段的每一分钟生成数据点
         for (let minute = Math.floor(currentTime * 60); minute < Math.floor(segmentEndTime * 60); minute++) {
-          if (minute >= 1440) break; // 确保不超过24小时
+          if (minute >= 1440) break;
           
-          // 计算原始时间范围内的相对位置
           const progress = (minute / 60 - currentTime) / segmentDuration;
           const originalTime = selection.start + progress * (selection.end - selection.start);
           
-          // 使用线性插值获取该时间点的值
           const value = getValueAtTime(originalTime, segmentData);
           
           if (value !== null) {
@@ -346,14 +327,11 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         currentTime = segmentEndTime;
       });
       
-      // 填充未被选中片段的数据点
       for (let i = 0; i < 1440; i++) {
         if (newData[i].value === null) {
-          // 使用前后有效值的平均值，或者最近的有效值
           let prevValue = null;
           let nextValue = null;
           
-          // 向前找最近的有效值
           for (let j = i - 1; j >= 0; j--) {
             if (newData[j].value !== null) {
               prevValue = newData[j].value;
@@ -361,7 +339,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
             }
           }
           
-          // 向后找最近的有效值
           for (let j = i + 1; j < 1440; j++) {
             if (newData[j].value !== null) {
               nextValue = newData[j].value;
@@ -369,7 +346,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
             }
           }
           
-          // 如果两边都有值，取平均值；否则使用有效的那个值
           if (prevValue !== null && nextValue !== null) {
             newData[i].value = parseFloat(((prevValue + nextValue) / 2).toFixed(8));
           } else if (prevValue !== null) {
@@ -377,132 +353,221 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
           } else if (nextValue !== null) {
             newData[i].value = nextValue;
           } else {
-            // 如果没有任何有效值，使用原始数据的第一个值
             newData[i].value = originalData[0]?.value || 0;
           }
         }
       }
       
-      // 直接更新原序列的数据
       series.value[seriesIndex] = {
         ...series.value[seriesIndex],
         data: newData
       };
     });
     
-    // 清除选择
-    clearSelection();
+    const afterData = getSeriesSnapshot(selectedSeries.value);
     
-    // 保存状态
-    saveState();
+    recordOperation('expand', selectedSeries.value, { selections }, beforeData, afterData);
+    
+    clearSelection();
   }
 
   const findSimilarPatterns = (seriesId) => {
     if (!selectedTimeRange.value || !seriesId) return []
     
+    const datasetStore = useDatasetStore()
+    const originalDataset = datasetStore.getOriginalData
+    
+    console.log('开始寻找相似模式, 数据集大小:', originalDataset ? originalDataset.length : 0);
+    
+    // 以下是处理当前选中序列的逻辑
+    const patterns = []
+    
     const sourceSeries = series.value.find(s => s.id === seriesId)
     if (!sourceSeries) return []
-
-    const patterns = []
+    
     const { start, end } = selectedTimeRange.value
     const duration = end - start
-
-    // 获取当前选择区域的边界值
-    const sourceData = sourceSeries.data
-    const leftValue = interpolateValue(sourceData, start)
-    const rightValue = interpolateValue(sourceData, end)
-
-    // 获取所选模式的数据
-    const selectedPattern = sourceData.filter(p => 
-      p && !isNaN(p.time) && !isNaN(p.value) && 
+    
+    // 提取目标模式的边界值用于相似度匹配
+    const leftValue = interpolateValue(sourceSeries.data, start)
+    const rightValue = interpolateValue(sourceSeries.data, end)
+    
+    // 计算在选定范围内的模式能量
+    const selectedData = sourceSeries.data.filter(p => 
+      p && p.time !== null && p.time !== undefined && 
+      p.value !== null && p.value !== undefined && 
+      !isNaN(p.time) && !isNaN(p.value) && 
       p.time >= start && p.time <= end
     )
-
-    // 遍历所有曲线数据
-    for (const currentSeries of series.value) {
-      // 获取当前曲线数据
-      const currentData = currentSeries.data
+    
+    console.log('源模式: 时间范围=' + start.toFixed(2) + '-' + end.toFixed(2) + ', 边界值: 左=' + leftValue.toFixed(2) + ', 右=' + rightValue.toFixed(2));
+    
+    // 从数据集中搜索相似模式
+    const maxPossibleDiff = 200 // 可能的最大差异值
+    
+    // 只在数据集中搜索，不在编辑视图中搜索
+    if (originalDataset && originalDataset.length > 0) {
+      // 跟踪匹配的日期分布
+      const matchedDateDistribution = {}
       
-      // 使用滑动窗口搜索相似模式
-      for (let i = 0; i < currentData.length; i++) {
-        const point = currentData[i]
-        if (!point || isNaN(point.time) || isNaN(point.value)) continue
+      // 对于每个用户，处理其数据
+      for (const userData of originalDataset) {
+        if (!userData || !userData.data || !userData.id) continue
         
-        const windowStart = point.time
-        const windowEnd = windowStart + duration
-
-        if (windowEnd > 24) break
-
-        // 跳过与当前选择相同的区域
-        if (currentSeries.id === seriesId && 
-            Math.abs(windowStart - start) < 0.1 && 
-            Math.abs(windowEnd - end) < 0.1) continue
-
-        const windowData = currentData.filter(p => 
-          p && !isNaN(p.time) && !isNaN(p.value) && 
-          p.time >= windowStart && p.time <= windowEnd
-        )
+        // 按日期分组数据
+        const dataByDate = {}
         
-        if (windowData.length < 2) continue
-
-        // 获取边界值
-        const windowLeftValue = interpolateValue(currentData, windowStart)
-        const windowRightValue = interpolateValue(currentData, windowEnd)
-
-        // 只基于边界值计算相似度
-        const leftDiff = Math.abs(leftValue - windowLeftValue)
-        const rightDiff = Math.abs(rightValue - windowRightValue)
-        
-        // 边界值差异归一化为相似度 (0-1)
-        const maxPossibleDiff = 10  // 假设最大可能差异是10
-        const leftSimilarity = 1 - Math.min(leftDiff / maxPossibleDiff, 1)
-        const rightSimilarity = 1 - Math.min(rightDiff / maxPossibleDiff, 1)
-        
-        // 计算综合相似度，只基于边界匹配
-        const similarity = (leftSimilarity + rightSimilarity) / 2
-
-        // 仅包含相似度高的模式
-        if (similarity > 0.7) {
-          // 根据曲线类型设置颜色
-          let seriesColor;
-          switch (currentSeries.type) {
-            case 'LF':
-              seriesColor = '#92400E'; // 低频颜色
-              break;
-            case 'MF':
-              seriesColor = '#9D174D'; // 中频颜色
-              break;
-            case 'HF':
-              seriesColor = '#3730A3'; // 高频颜色
-              break;
-            default:
-              // 使用序号生成颜色
-              const colorIndex = series.value.findIndex(s => s.id === currentSeries.id) % 3;
-              const defaultColors = ['#2563eb', '#dc2626', '#16a34a']; // 蓝色、红色、绿色
-              seriesColor = defaultColors[colorIndex >= 0 ? colorIndex : 0];
+        // 第一次遍历：将数据按日期分组
+        for (const point of userData.data) {
+          if (!point.time || !point.value) continue
+          
+          let dateStr = '未知';
+          let timeValue = 0;
+          
+          // 提取日期和转换时间
+          if (typeof point.time === 'string' && point.time.includes('-') && point.time.includes(' ')) {
+            const parts = point.time.split(' ');
+            dateStr = parts[0]; // 日期部分: YYYY-MM-DD
+            const timePart = parts[1]; // 时间部分: HH:MM:SS
+            
+            if (timePart) {
+              const timeParts = timePart.split(':').map(Number);
+              if (timeParts.length >= 2) {
+                timeValue = timeParts[0] + (timeParts[1] / 60) + ((timeParts.length > 2 ? timeParts[2] : 0) / 3600);
+              }
+            }
+          } else if (typeof point.time === 'string') {
+            // 如果只有时间部分，没有日期
+            const parts = point.time.split(':').map(Number);
+            if (parts.length >= 2) {
+              timeValue = parts[0] + (parts[1] / 60) + ((parts.length > 2 ? parts[2] : 0) / 3600);
+            }
+          } else if (typeof point.time === 'number') {
+            timeValue = point.time;
           }
           
-          patterns.push({
-            seriesId: currentSeries.id,
-            start: windowStart,
-            end: windowEnd,
-            data: windowData,
-            similarity,
-            leftValue: windowLeftValue,
-            rightValue: windowRightValue,
-            color: seriesColor,
-            sourceName: currentSeries.id, // 添加来源曲线名称
-            sourceType: currentSeries.type || 'original' // 添加来源曲线类型
+          // 只添加有效数据点
+          if (!isNaN(timeValue) && !isNaN(point.value)) {
+            if (!dataByDate[dateStr]) {
+              dataByDate[dateStr] = [];
+            }
+            
+            dataByDate[dateStr].push({
+              time: timeValue,
+              value: point.value,
+              originalTime: point.time
+            });
+          }
+        }
+        
+        // 第二次遍历：处理每个日期的数据
+        for (const [dateStr, dateData] of Object.entries(dataByDate)) {
+          // 跳过太少数据点的日期
+          if (dateData.length < 100) continue;
+          
+          // 排序数据
+          dateData.sort((a, b) => a.time - b.time);
+          
+          console.log(`处理用户${userData.id}的${dateStr}数据: ${dateData.length}个点, 范围${dateData[0].time.toFixed(2)}-${dateData[dateData.length-1].time.toFixed(2)}`);
+          
+          // 对每个日期的数据进行模式匹配
+          const datasetStep = Math.max(1, Math.floor(dateData.length / 200));
+          
+          // 预计算窗口左边界值
+          const windowLeftValues = [];
+          for (let i = 0; i < dateData.length; i += datasetStep) {
+            const point = dateData[i];
+            if (!point) continue;
+            
+            const windowStart = point.time;
+            windowLeftValues.push({
+              index: i,
+              time: windowStart,
+              leftValue: interpolateValue(dateData, windowStart)
+            });
+          }
+          
+          // 按左边界值相似度排序
+          windowLeftValues.sort((a, b) => {
+            const aDiff = Math.abs(leftValue - a.leftValue);
+            const bDiff = Math.abs(leftValue - b.leftValue);
+            return aDiff - bDiff;
           });
+          
+          // 只处理相似度最高的前50%窗口
+          const topWindowsCount = Math.ceil(windowLeftValues.length * 0.5);
+          const topWindows = windowLeftValues.slice(0, topWindowsCount);
+          
+          for (const window of topWindows) {
+            const windowStart = window.time;
+            const windowEnd = windowStart + duration;
+            
+            if (windowEnd > 24) continue;
+            
+            // 避免匹配过近区域
+            if (sourceSeries.id && sourceSeries.id.includes(`user_${userData.id}`) && 
+                Math.abs(windowStart - start) < duration * 0.3) {
+              continue;
+            }
+            
+            // 使用预计算的左边界值
+            const windowLeftValue = window.leftValue;
+            const leftDiff = Math.abs(leftValue - windowLeftValue);
+            const leftSimilarity = 1 - Math.min(leftDiff / maxPossibleDiff, 1);
+            
+            // 左边界相似度阈值过滤
+            if (leftSimilarity < 0.6) continue;
+            
+            // 计算右边界值和整体相似度
+            const windowRightValue = interpolateValue(dateData, windowEnd);
+            const rightDiff = Math.abs(rightValue - windowRightValue);
+            const rightSimilarity = 1 - Math.min(rightDiff / maxPossibleDiff, 1);
+            
+            const similarity = (leftSimilarity + rightSimilarity) / 2;
+            
+            if (similarity <= 0.7) continue;
+            
+            // 提取窗口数据
+            const windowData = dateData.filter(p => 
+              p && p.time >= windowStart && p.time <= windowEnd
+            );
+            
+            const patternEnergy = calculatePatternEnergy(windowData);
+            
+            // 使用日期作为模式标识的一部分
+            const displayName = `user ${userData.id} (${dateStr})`;
+            
+            patterns.push({
+              seriesId: `dataset_user_${userData.id}_${dateStr}`,
+              start: windowStart,
+              end: windowEnd,
+              data: windowData,
+              similarity,
+              leftValue: windowLeftValue,
+              rightValue: windowRightValue,
+              color: getColorForEnergy(patternEnergy),
+              sourceName: displayName,
+              sourceType: 'dataset',
+              userId: userData.id,
+              date: dateStr
+            });
+            
+            // 更新日期分布统计
+            matchedDateDistribution[dateStr] = (matchedDateDistribution[dateStr] || 0) + 1;
+          }
         }
       }
+      
+      console.log('处理用户数:', Object.keys(matchedDateDistribution).length);
+      console.log('匹配模式日期分布:', matchedDateDistribution);
     }
 
-    // 根据相似度排序
-    patterns.sort((a, b) => b.similarity - a.similarity)
+    // 排序并返回结果
+    console.log(`共找到 ${patterns.length} 个匹配模式`);
+    patterns.sort((a, b) => b.similarity - a.similarity);
     
-    // 返回前10个最相似的模式
-    return patterns.slice(0, 10)
+    // 只返回来自数据集的匹配模式
+    return patterns.filter(pattern => pattern.sourceType === 'dataset').slice(0, 10);
   }
 
   const interpolateValue = (data, time) => {
@@ -523,7 +588,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const prev = points[0]
     const next = nextPoints[0]
     
-    // Avoid division by zero
     if (Math.abs(next.time - prev.time) < 0.0001) return prev.value
     
     const t = (time - prev.time) / (next.time - prev.time)
@@ -533,24 +597,19 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   const replaceWithPattern = (pattern, seriesId) => {
     if (!selectedTimeRange.value || !seriesId) return
 
+    const beforeData = getSeriesSnapshot([seriesId])
+
     const { start, end } = selectedTimeRange.value
     const duration = end - start
 
     const seriesIndex = series.value.findIndex(s => s.id === seriesId)
     if (seriesIndex === -1) return
 
-    // Create a deep copy of the data to avoid mutation issues
     const newData = JSON.parse(JSON.stringify(series.value[seriesIndex].data))
     
-    // Get values at selection boundaries for smooth transition
     const leftValue = interpolateValue(newData, start)
     const rightValue = interpolateValue(newData, end)
     
-    // Get values at pattern boundaries
-    const patternLeftValue = pattern.leftValue
-    const patternRightValue = pattern.rightValue
-    
-    // Calculate scale and offset for value adjustment to match boundaries
     const patternData = pattern.data.filter(p => 
       p && p.time !== null && p.time !== undefined && 
       p.value !== null && p.value !== undefined && 
@@ -558,9 +617,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     )
     
     if (patternData.length < 2) return
-    
-    const patternMin = Math.min(...patternData.map(p => p.value))
-    const patternMax = Math.max(...patternData.map(p => p.value))
     
     // Remove existing points in the selection range
     for (let i = newData.length - 1; i >= 0; i--) {
@@ -570,47 +626,66 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       }
     }
     
-    // Add new points from the pattern with time adjustment
+    // Add new points from the pattern, with appropriate time mapping
+    const replacementPoints = [];
     patternData.forEach(point => {
-      // Normalize the time to fit the selection range
       const normalizedTime = (point.time - pattern.start) / (pattern.end - pattern.start)
       const newTime = start + normalizedTime * duration
       
-      // Adjust value to match boundary conditions
       let adjustedValue = point.value
       
-      // Apply boundary matching
+      // Smooth transition at boundaries (first and last 10% of the range)
       if (normalizedTime < 0.1) {
-        // Blend with left boundary
         const blendFactor = normalizedTime / 0.1
         adjustedValue = leftValue * (1 - blendFactor) + point.value * blendFactor
       } else if (normalizedTime > 0.9) {
-        // Blend with right boundary
         const blendFactor = (normalizedTime - 0.9) / 0.1
         adjustedValue = point.value * (1 - blendFactor) + rightValue * blendFactor
       }
       
-      newData.push({
+      replacementPoints.push({
         time: newTime,
         value: adjustedValue
       })
     })
     
-    // Sort data by time
-    newData.sort((a, b) => a.time - b.time)
+    // 线性插值确保每分钟都有数据点
+    const interpolatedPoints = ensureMinuteGranularity(replacementPoints, start, end);
     
-    // Apply smooth transitions at boundaries
-    const transitionRange = 0.5 // Hours for transition
+    // 在添加到newData前确保没有时间相近的点
+    // 优先保留来自插值的点，因为它们是按分钟对齐的
+    interpolatedPoints.forEach(point => {
+      // 检查是否已经存在时间非常接近的点
+      const existingPointIndex = newData.findIndex(p => 
+        Math.abs(p.time - point.time) < 0.001 // 约3.6秒的阈值
+      );
+      
+      if (existingPointIndex === -1) {
+        // 如果不存在相近的点，直接添加
+        newData.push(point);
+      } else {
+        // 如果存在相近的点，替换它
+        // 注意：我们更新时间以确保对齐到整分钟
+        newData[existingPointIndex].time = point.time;
+        newData[existingPointIndex].value = point.value;
+      }
+    });
+    
+    // Sort data points by time
+    newData.sort((a, b) => a.time - b.time);
+    
+    // Add transition zones beyond the selection range
+    const transitionRange = 0.5
     const startTransition = Math.max(0, start - transitionRange)
     const endTransition = Math.min(24, end + transitionRange)
     
-    // Apply smooth transitions outside the selection
+    // Apply easing to transition zones
     for (let i = 0; i < newData.length; i++) {
       const point = newData[i]
       if (!point || isNaN(point.time) || isNaN(point.value)) continue
       
+      // Pre-selection transition
       if (point.time >= startTransition && point.time < start) {
-        // Smooth transition before selection
         const progress = (point.time - startTransition) / transitionRange
         const easeProgress = d3.easeCubicInOut(progress)
         
@@ -619,8 +694,9 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         if (nextPoint) {
           newData[i].value = originalValue * (1 - easeProgress) + nextPoint.value * easeProgress
         }
-      } else if (point.time > end && point.time <= endTransition) {
-        // Smooth transition after selection
+      } 
+      // Post-selection transition
+      else if (point.time > end && point.time <= endTransition) {
         const progress = (point.time - end) / transitionRange
         const easeProgress = d3.easeCubicInOut(progress)
         
@@ -634,13 +710,94 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       }
     }
     
-    // Update series with new data
+    // Update the series with new data
     series.value[seriesIndex] = {
       ...series.value[seriesIndex],
       data: newData
     }
     
-    saveState()
+    // Record the operation for undo/redo
+    const afterData = getSeriesSnapshot([seriesId])
+    recordOperation('replace', seriesId, { 
+      pattern: {
+        seriesId: pattern.seriesId,
+        start: pattern.start,
+        end: pattern.end,
+        userId: pattern.userId,
+        date: pattern.date
+      }
+    }, beforeData, afterData)
+  }
+
+  // 添加这个新函数来确保每分钟都有数据点
+  const ensureMinuteGranularity = (points, start, end) => {
+    if (points.length < 2) return points;
+    
+    // 先按时间排序
+    points.sort((a, b) => a.time - b.time);
+    
+    const result = [];
+    // 转换小时为分钟，并计算需要的分钟点
+    const startMinutes = Math.floor(start * 60);
+    const endMinutes = Math.ceil(end * 60);
+    
+    // 为每一分钟创建一个数据点
+    for (let minuteIndex = startMinutes; minuteIndex <= endMinutes; minuteIndex++) {
+      const currentTime = minuteIndex / 60; // 转回小时表示
+      
+      // 如果在已有点附近(±0.001小时，约3.6秒)，使用已有点
+      const existingPoint = points.find(p => Math.abs(p.time - currentTime) < 0.001);
+      if (existingPoint) {
+        result.push({
+          time: currentTime, // 使用精确的分钟时间
+          value: existingPoint.value
+        });
+        continue;
+      }
+      
+      // 找到当前时间点的左右边界点进行插值
+      const lowerIndex = points.findIndex(p => p.time > currentTime) - 1;
+      
+      // 边界情况处理
+      if (lowerIndex < 0) {
+        // 在第一个点之前，使用第一个点的值
+        result.push({
+          time: currentTime,
+          value: points[0].value
+        });
+      } else if (lowerIndex >= points.length - 1) {
+        // 在最后一个点之后，使用最后一个点的值
+        result.push({
+          time: currentTime,
+          value: points[points.length - 1].value
+        });
+      } else {
+        // 正常情况，进行线性插值
+        const lowerPoint = points[lowerIndex];
+        const upperPoint = points[lowerIndex + 1];
+        
+        // 计算权重
+        const totalInterval = upperPoint.time - lowerPoint.time;
+        if (totalInterval <= 0) {
+          // 如果两点时间相同，使用其中一个的值
+          result.push({
+            time: currentTime,
+            value: lowerPoint.value
+          });
+        } else {
+          const weight = (currentTime - lowerPoint.time) / totalInterval;
+          // 线性插值计算值
+          const interpolatedValue = lowerPoint.value + weight * (upperPoint.value - lowerPoint.value);
+          
+          result.push({
+            time: currentTime,
+            value: interpolatedValue
+          });
+        }
+      }
+    }
+    
+    return result;
   }
 
   const cloneSeries = (seriesId, targetTime) => {
@@ -649,6 +806,8 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const seriesIndex = series.value.findIndex(s => s.id === seriesId);
     if (seriesIndex === -1) return;
     
+    const beforeData = getSeriesSnapshot([seriesId]);
+
     const { start, end } = selectedTimeRange.value;
     const sourceData = series.value[seriesIndex].data.filter(
       point => point && !isNaN(point.time) && !isNaN(point.value) &&
@@ -657,15 +816,12 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     
     if (sourceData.length === 0) return;
     
-    // 获取目标时间范围
     const duration = end - start;
     const targetStart = targetTime;
     const targetEnd = targetTime + duration;
     
-    // 复制当前数据
     const newData = [...series.value[seriesIndex].data];
     
-    // 移除目标范围内的现有点
     for (let i = newData.length - 1; i >= 0; i--) {
       const point = newData[i];
       if (point && !isNaN(point.time) && point.time >= targetStart && point.time <= targetEnd) {
@@ -673,7 +829,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       }
     }
     
-    // 添加克隆的点
     sourceData.forEach(point => {
       const newPoint = {
         time: parseFloat((point.time - start + targetTime).toFixed(2)),
@@ -682,35 +837,33 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       newData.push(newPoint);
     });
     
-    // 排序并确保数据点数量正确
     newData.sort((a, b) => a.time - b.time);
     const finalData = ensureDataPoints(newData);
     
-    // 更新序列
     series.value[seriesIndex] = {
       ...series.value[seriesIndex],
       data: finalData
     };
     
-    saveState();
+    const afterData = getSeriesSnapshot([seriesId]);
+    recordOperation('clone', seriesId, { 
+      sourceRange: { start, end }, 
+      targetTime 
+    }, beforeData, afterData);
   }
 
   const importData = (importedSeries) => {
     if (!importedSeries || importedSeries.length === 0) return
     
-    // Add each imported series
     importedSeries.forEach(imported => {
-      // Check if a series with this ID already exists
       const existingIndex = series.value.findIndex(s => s.id === imported.id)
       
       if (existingIndex !== -1) {
-        // Update existing series
         series.value[existingIndex] = {
           ...series.value[existingIndex],
           data: imported.data
         }
       } else {
-        // Add new series
         addSeries({
           id: imported.id,
           data: imported.data,
@@ -724,40 +877,64 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   }
 
   const undo = () => {
-    if (historyIndex.value > 0) {
-      historyIndex.value--
-      series.value = JSON.parse(JSON.stringify(history.value[historyIndex.value]))
+    if (operationIndex.value < 0) return;
+    
+    const operation = operations.value[operationIndex.value];
+    
+    if (operation.beforeData) {
+      operation.seriesIds.forEach(id => {
+        const seriesIndex = series.value.findIndex(s => s.id === id);
+        if (seriesIndex !== -1 && operation.beforeData[id]) {
+          series.value[seriesIndex] = {
+            ...series.value[seriesIndex],
+            data: JSON.parse(JSON.stringify(operation.beforeData[id]))
+          };
+        }
+      });
     }
+    
+    operationIndex.value--;
+    
+    console.log(`Undid operation: ${operation.type}`);
   }
 
   const redo = () => {
-    if (historyIndex.value < history.value.length - 1) {
-      historyIndex.value++
-      series.value = JSON.parse(JSON.stringify(history.value[historyIndex.value]))
+    if (operationIndex.value >= operations.value.length - 1) return;
+    
+    operationIndex.value++;
+    const operation = operations.value[operationIndex.value];
+    
+    if (operation.afterData) {
+      operation.seriesIds.forEach(id => {
+        const seriesIndex = series.value.findIndex(s => s.id === id);
+        if (seriesIndex !== -1 && operation.afterData[id]) {
+          series.value[seriesIndex] = {
+            ...series.value[seriesIndex],
+            data: JSON.parse(JSON.stringify(operation.afterData[id]))
+          };
+        }
+      });
     }
+    
+    console.log(`Redid operation: ${operation.type}`);
   }
 
-  const canUndo = computed(() => historyIndex.value > 0)
-  const canRedo = computed(() => historyIndex.value < history.value.length - 1)
+  const canUndo = computed(() => operationIndex.value >= 0);
+  const canRedo = computed(() => operationIndex.value < operations.value.length - 1);
 
-  // 添加删除系列的方法
   const deleteSeries = (seriesId) => {
     const index = series.value.findIndex(s => s.id === seriesId)
     if (index !== -1) {
-      // 如果这个系列是被选中的，清除选择
       if (selectedSeries.value.includes(seriesId)) {
         selectedSeries.value = selectedSeries.value.filter(id => id !== seriesId)
       }
       
-      // 删除系列
       series.value.splice(index, 1)
       saveState()
     }
   }
 
   function triggerUpdate() {
-    // This is a dummy method to trigger reactivity updates
-    // We just need to touch a reactive property
     series.value = [...series.value];
   }
 
@@ -767,21 +944,16 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
 
   const getViewport = computed(() => viewport.value);
 
-  // 添加修改函数
   const updateEditedSeriesData = (data) => {
-    // 处理数据，确保数值格式正确
     const processedData = data.map(series => {
-      // 处理每个数据点
       const processedPoints = series.data.map(point => {
         let time = point.time;
         let value = point.value;
         
-        // 如果时间是数字，保留两位小数
         if (typeof time === 'number') {
           time = parseFloat(time.toFixed(2));
         }
         
-        // 值保留八位小数
         if (typeof value === 'number') {
           value = parseFloat(value.toFixed(8));
         }
@@ -801,16 +973,13 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     editedSeriesData.value = processedData;
   }
 
-  // 添加一个辅助函数来检查和修复数据点数量
   const ensureDataPoints = (data, expectedPoints = 1440) => {
     if (!data || data.length === 0) return [];
     
-    // 如果点数正确，直接返回
     if (data.length === expectedPoints) return data;
     
     const newData = new Array(expectedPoints);
     
-    // 初始化时间点
     for (let i = 0; i < expectedPoints; i++) {
       const hour = i / 60;
       newData[i] = {
@@ -819,24 +988,19 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       };
     }
     
-    // 对现有数据进行插值
     data.sort((a, b) => a.time - b.time);
     
     for (let i = 0; i < expectedPoints; i++) {
       const currentTime = i / 60;
       
-      // 找到最近的两个点进行插值
       const leftIndex = data.findIndex(p => p.time > currentTime) - 1;
       const rightIndex = leftIndex + 1;
       
       if (leftIndex < 0) {
-        // 在开始之前
         newData[i].value = data[0].value;
       } else if (rightIndex >= data.length) {
-        // 在结束之后
         newData[i].value = data[data.length - 1].value;
       } else {
-        // 进行线性插值
         const leftPoint = data[leftIndex];
         const rightPoint = data[rightIndex];
         const t = (currentTime - leftPoint.time) / (rightPoint.time - leftPoint.time);
@@ -845,6 +1009,257 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     }
     
     return newData;
+  };
+
+  const getSeriesSnapshot = (seriesIds) => {
+    if (!seriesIds || !seriesIds.length) return null;
+    
+    const snapshot = {};
+    seriesIds.forEach(id => {
+      const seriesIndex = series.value.findIndex(s => s.id === id);
+      if (seriesIndex !== -1) {
+        snapshot[id] = JSON.parse(JSON.stringify(series.value[seriesIndex].data));
+      }
+    });
+    
+    return snapshot;
+  }
+
+  const recordOperation = (type, affectedSeriesIds, params = {}, beforeData = null, afterData = null) => {
+    if (operationIndex.value < operations.value.length - 1) {
+      operations.value = operations.value.slice(0, operationIndex.value + 1)
+    }
+    
+    if (!beforeData && !afterData) {
+      const seriesIds = Array.isArray(affectedSeriesIds) ? affectedSeriesIds : [affectedSeriesIds];
+      
+      afterData = getSeriesSnapshot(seriesIds);
+      
+      console.warn(`Operation ${type} recorded without before data`);
+    }
+    
+    const operation = {
+      id: Date.now() + Math.random().toString(36).substring(2, 9),
+      timestamp: new Date().toISOString(),
+      type,
+      seriesIds: Array.isArray(affectedSeriesIds) ? affectedSeriesIds : [affectedSeriesIds],
+      timeRange: selectedTimeRange.value ? { ...selectedTimeRange.value } : null,
+      params,
+      beforeData,
+      afterData
+    }
+    
+    operations.value.push(operation)
+    
+    if (operations.value.length > maxOperations) {
+      operations.value.shift()
+    }
+    
+    operationIndex.value = operations.value.length - 1
+  }
+
+  const exportEditHistory = () => {
+    // 为每个操作确保beforeData和afterData可用
+    const processedOperations = operations.value.map(op => {
+      // 创建一个新对象，避免修改原始数据
+      const processedOp = { ...op };
+      
+      // 确保beforeData和afterData存在
+      if (!processedOp.beforeData || !processedOp.afterData) {
+        console.warn(`Operation ${op.id} (${op.type}) has missing data`);
+      }
+      
+      return processedOp;
+    });
+    
+    return {
+      operations: processedOperations,
+      currentIndex: operationIndex.value
+    };
+  }
+
+  const moveSeriesWithoutRecord = (seriesId, offset) => {
+    if (!selectedTimeRange.value) return;
+
+    const seriesIndex = series.value.findIndex(s => s.id === seriesId);
+    if (seriesIndex === -1) return;
+
+    const currentSeries = series.value[seriesIndex];
+    const { start, end } = selectedTimeRange.value;
+
+    const hasChildren = series.value.some(s => s.parentId === seriesId);
+
+    if (currentSeries.parentId) {
+      const parentIndex = series.value.findIndex(s => s.id === currentSeries.parentId);
+      if (parentIndex !== -1) {
+        const childSeries = series.value.filter(s => s.parentId === currentSeries.parentId);
+        
+        const newParentData = JSON.parse(JSON.stringify(series.value[parentIndex].data));
+        
+        const newData = JSON.parse(JSON.stringify(currentSeries.data));
+        
+        newData.forEach((point, i) => {
+          if (point && point.time >= start && point.time <= end) {
+            newData[i] = {
+              time: point.time + offset.x,
+              value: Math.max(0, Math.min(15000, point.value + offset.y))
+            };
+          }
+        });
+        
+        newParentData.forEach((point, i) => {
+          if (point) {
+            point.value = 0;
+            childSeries.forEach(child => {
+              const childData = child.id === seriesId ? newData : child.data;
+              if (childData[i] && childData[i].time === point.time) {
+                point.value += childData[i].value;
+              }
+            });
+          }
+        });
+        
+        series.value[seriesIndex] = {
+          ...currentSeries,
+          data: newData
+        };
+        
+        series.value[parentIndex] = {
+          ...series.value[parentIndex],
+          data: newParentData
+        };
+      }
+    } else {
+      if (hasChildren) {
+        console.warn('Modifying parent series will break consistency with child series');
+      }
+      
+      const newData = JSON.parse(JSON.stringify(currentSeries.data));
+      
+      newData.forEach((point, i) => {
+        if (point && point.time >= start && point.time <= end) {
+          newData[i] = {
+            time: point.time + offset.x,
+            value: Math.max(0, Math.min(15000, point.value + offset.y))
+          };
+        }
+      });
+      
+      newData.sort((a, b) => a.time - b.time);
+      
+      series.value[seriesIndex] = {
+        ...currentSeries,
+        data: newData
+      };
+    }
+
+    series.value[seriesIndex].data = ensureDataPoints(series.value[seriesIndex].data);
+  }
+
+  const recordBatchOperation = (type, affectedSeriesIds, params = {}, beforeData = null, afterData = null) => {
+    if (operationIndex.value < operations.value.length - 1) {
+      operations.value = operations.value.slice(0, operationIndex.value + 1);
+    }
+    
+    if (!beforeData || !afterData) {
+      console.warn(`Batch operation ${type} recorded with incomplete data`);
+    }
+    
+    const operation = {
+      id: Date.now() + Math.random().toString(36).substring(2, 9),
+      timestamp: new Date().toISOString(),
+      type,
+      seriesIds: Array.isArray(affectedSeriesIds) ? affectedSeriesIds : [affectedSeriesIds],
+      timeRange: selectedTimeRange.value ? { ...selectedTimeRange.value } : null,
+      params,
+      beforeData,
+      afterData
+    };
+    
+    operations.value.push(operation);
+    
+    if (operations.value.length > maxOperations) {
+      operations.value.shift();
+    }
+    
+    operationIndex.value = operations.value.length - 1;
+    
+    console.log(`Recorded batch operation: ${type}`);
+  };
+
+  const convertTimeStringToHours = (timeStr) => {
+    if (!timeStr) return 0;
+    
+    // 如果已经是数字，直接返回
+    if (typeof timeStr === 'number') return timeStr;
+    
+    // 如果是时间字符串格式
+    if (typeof timeStr === 'string') {
+      // 处理包含日期的完整时间戳 (YYYY-MM-DD HH:MM:SS)
+      if (timeStr.includes('-') && timeStr.includes(' ')) {
+        // 提取时间部分
+        const timePart = timeStr.split(' ')[1];
+        if (timePart) {
+          const parts = timePart.split(':').map(Number);
+          if (parts.length >= 2) {
+            const hours = parts[0];
+            const minutes = parts[1];
+            const seconds = parts.length > 2 ? parts[2] : 0;
+            
+            // 确保时间范围在0-24小时内
+            const decimalHours = hours + (minutes / 60) + (seconds / 3600);
+            
+            console.log(`时间转换(日期时间): "${timeStr}" => ${decimalHours.toFixed(4)}小时`);
+            return decimalHours;
+          }
+        }
+      }
+      
+      // 处理标准时间格式 (HH:MM:SS 或 HH:MM)
+      const parts = timeStr.split(':').map(Number);
+      if (parts.length >= 2) {
+        const hours = parts[0];
+        const minutes = parts[1];
+        const seconds = parts.length > 2 ? parts[2] : 0;
+        
+        // 确保时间范围在0-24小时内
+        const decimalHours = hours + (minutes / 60) + (seconds / 3600);
+        
+        console.log(`时间转换(标准时间): "${timeStr}" => ${decimalHours.toFixed(4)}小时`);
+        return decimalHours;
+      }
+    }
+    
+    console.warn(`无法解析的时间格式: ${timeStr}, 类型: ${typeof timeStr}`);
+    return 0;
+  };
+
+  const calculatePatternEnergy = (data) => {
+    if (!data || data.length < 2) return 0;
+    
+    let sum = 0;
+    for (let i = 1; i < data.length; i++) {
+      sum += Math.abs(data[i].value - data[i-1].value);
+    }
+    
+    return sum / (data.length - 1);
+  };
+
+  const getColorForEnergy = (energy) => {
+    if (energy > 5) return '#6548C7';
+    if (energy > 2) return '#9B71F6';
+    return '#8367F8';
+  };
+
+  // 提取日期函数
+  const extractDateFromTimestamp = (timestamp) => {
+    if (!timestamp || typeof timestamp !== 'string') return '';
+    
+    // 尝试从时间戳中提取日期部分
+    if (timestamp.includes('-') && timestamp.includes(' ')) {
+      return timestamp.split(' ')[0]; // 提取YYYY-MM-DD部分
+    }
+    return '';
   };
 
   return {
@@ -875,6 +1290,12 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     setViewport,
     getViewport,
     editedSeriesData,
-    updateEditedSeriesData
+    updateEditedSeriesData,
+    exportEditHistory,
+    operations: computed(() => operations.value),
+    operationIndex,
+    moveSeriesWithoutRecord,
+    recordBatchOperation,
+    getSeriesSnapshot
   }
 })

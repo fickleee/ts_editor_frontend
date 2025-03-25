@@ -110,4 +110,64 @@ export function processSeriesData(series) {
   
   // 对于大数据集进行降采样
   return result.length > 1000 ? downsampleData(result, 1000) : result
+}
+
+/**
+ * Format operation history for readable display
+ * @param {Array} operations - Array of operations from the store
+ * @returns {Array} Formatted operations with human-readable descriptions
+ */
+export function formatOperationHistory(operations) {
+  if (!operations || !operations.length) return [];
+  
+  return operations.map(op => {
+    // Format timestamp
+    const date = new Date(op.timestamp);
+    const formattedTime = date.toLocaleTimeString();
+    
+    // Create human-readable description based on operation type
+    let description = '';
+    switch (op.type) {
+      case 'move-x':
+        // The offset may no longer be in params for batch operations
+        // Instead, we could calculate the difference from before/after data
+        description = `Adjusted horizontal position of series ${op.seriesIds.join(', ')}`;
+        break;
+      case 'move-y':
+        description = `Adjusted vertical position of series ${op.seriesIds.join(', ')}`;
+        break;
+      case 'move-xy':
+        description = `Adjusted position of series ${op.seriesIds.join(', ')}`;
+        break;
+      case 'curve':
+        description = `Applied curve transformation to series ${op.seriesIds.join(', ')}`;
+        break;
+      case 'clone':
+        description = `Cloned segment from ${op.params.sourceRange.start.toFixed(2)} to ${op.params.sourceRange.end.toFixed(2)} to position ${op.params.targetTime.toFixed(2)}`;
+        break;
+      case 'expand':
+        description = `Expanded ${op.params.selections.length} segments to fill 24 hours`;
+        break;
+      case 'replace':
+        description = `Replaced selection with pattern from series ${op.params.pattern.seriesId}`;
+        break;
+      default:
+        description = `${op.type} operation on series ${op.seriesIds.join(', ')}`;
+    }
+    
+    // Format time range if present
+    let timeRangeText = '';
+    if (op.timeRange) {
+      timeRangeText = `Time range: ${op.timeRange.start.toFixed(2)} - ${op.timeRange.end.toFixed(2)}`;
+    }
+    
+    return {
+      id: op.id,
+      timestamp: formattedTime,
+      type: op.type,
+      description,
+      timeRange: timeRangeText,
+      seriesIds: op.seriesIds
+    };
+  });
 } 
