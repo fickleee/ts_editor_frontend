@@ -1297,7 +1297,7 @@ const fetchData = async () => {
       createOverviewChart(datasetStore.getEditedData, overviewChart.value);
     }
   } catch (error) {
-    ElMessage.error('获取数据失败');
+    ElMessage.error('Failed to fetch data');
   } finally {
     // 关闭loading状态
     isLoading.value = false;
@@ -1342,17 +1342,38 @@ onUnmounted(() => {
 
 // 添加数据更新处理函数
 const handleDataUpdate = (event) => {
-  const { editedData } = event.detail;
-  allUserData.value = aggregateUserData(editedData);
-  allUserDataByWeek.value = aggregateDataByWeekday(editedData);
-  // 更新概览图表
-  if (overviewChart.value) {
-    createOverviewChart(editedData, overviewChart.value);
-  }
+  // 设置loading状态
+  isLoading.value = true;
   
-  // 更新折线图
-  if (lineChart.value) {
-    createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
+  try {
+    const { editedData } = event.detail;
+    
+    if (!editedData || !editedData.length) {
+      return;
+    }
+    
+    // 聚合数据
+    allUserData.value = aggregateUserData(editedData);
+    allUserDataByWeek.value = aggregateDataByWeekday(editedData);
+    
+    // 更新图表
+    if (overviewChart.value) {
+      createOverviewChart(editedData, overviewChart.value);
+    }
+    
+    if (lineChart.value) {
+      createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
+    }
+    
+  } catch (error) {
+    console.error('Error in handleDataUpdate:', error);
+    ElMessage.error('Failed to update view');
+  } finally {
+    // 关闭loading状态
+    setTimeout(() => {
+      isLoading.value = false;
+      // 发送成功消息
+    }, 500); // 添加小延迟以确保UI渲染完成
   }
 };
 

@@ -81,8 +81,16 @@ export const useDatasetStore = defineStore('dataset', () => {
   function updateEditedDataFromTrans() {
     console.time('updateEditedDataFromTrans');
     
+    // 注意：不再在这里触发loading状态，由NavBar的handleSyncClick负责
+    
     if (!transData.value || !transData.value.length) {
       console.warn('No trans data to update edited data');
+      
+      // 仍在没有数据时关闭loading状态
+      window.dispatchEvent(new CustomEvent('matrix-loading-changed', {
+        detail: { loading: false }
+      }));
+      
       return;
     }
 
@@ -165,11 +173,18 @@ export const useDatasetStore = defineStore('dataset', () => {
         }
       }));
       
-      console.timeEnd('updateEditedDataFromTrans');
+      
+      // 不在这里关闭loading状态，由MatrixChart的handleDataUpdate来关闭
     } catch (error) {
       console.error('Error updating edited data:', error);
-      ElMessage.error('更新数据时发生错误');
+      ElMessage.error('Error updating data');
+      
+      // 出错时关闭loading状态
+      window.dispatchEvent(new CustomEvent('matrix-loading-changed', {
+        detail: { loading: false }
+      }));
     }
+    // 不使用finally块，让handleDataUpdate处理关闭loading状态
   }
   
 

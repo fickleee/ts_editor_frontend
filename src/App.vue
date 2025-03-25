@@ -27,6 +27,8 @@ onUnmounted(() => {
 // 处理MatrixChart组件loading状态变化的函数
 const handleMatrixLoadingChanged = (event) => {
   const { loading } = event.detail;
+  
+  // 直接设置loading状态
   isLeftSideLoading.value = loading;
 };
 </script>
@@ -43,7 +45,7 @@ const handleMatrixLoadingChanged = (event) => {
             }">
         
         <!-- 统一的loading遮罩 -->
-        <div v-if="isLeftSideLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-50">
+        <div v-show="isLeftSideLoading" class="absolute inset-0 bg-white/80 flex items-center justify-center z-[100]">
           <div class="flex flex-col items-center gap-2">
             <div 
               :style="{

@@ -172,7 +172,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       // 是原始序列或父序列
       // 如果有子序列，提示用户但仍允许编辑
       if (hasChildren) {
-        ElMessage.warning('警告：修改父序列会破坏与子序列的一致性')
+        ElMessage.warning('Warning: Modifying the parent series will break consistency with child series')
       }
       
       // 正常编辑序列
