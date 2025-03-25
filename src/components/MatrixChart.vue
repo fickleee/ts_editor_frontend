@@ -383,9 +383,32 @@ const createOverviewChart = (data, container) => {
             .attr('cy', yScale(dataPoint.value))
             .attr('r', 2)
             .attr('fill', colorScale(dataPoint.userId))
-            .attr('stroke', '#000')
-            .attr('stroke-width', 0.3)
             .attr('class', `outlier-point user-${dataPoint.userId} weekday-${dataPoint.weekday}`)
+            .attr('data-tooltip-content', () => {
+              let content = `
+                <div class="tooltip-content">
+                  <div class="tooltip-row">
+                    <span class="label">User:</span>
+                    <span class="value">${dataPoint.userId}</span>
+                  </div>
+                  <div class="tooltip-row">
+                    <span class="label">Weekday:</span>
+                    <span class="value">${dataPoint.weekdayName}</span>
+                  </div>
+                  <div class="tooltip-row">
+                    <span class="label">Value:</span>
+                    <span class="value">${dataPoint.value.toFixed(2)}</span>
+                  </div>
+                  ${dataPoint.annotations && dataPoint.annotations.length > 0 ? `
+                    <div class="tooltip-row">
+                      <span class="label">Annotations:</span>
+                      <span class="value">${dataPoint.annotations.join(', ')}</span>
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+              return content;
+            })
             .style('cursor', 'move')
             .call(d3.drag()
               .on('start', function(event, d) {
@@ -475,9 +498,34 @@ const createOverviewChart = (data, container) => {
             .on('mouseover', function() {
               // 放大异常点
               d3.select(this)
-                .attr('r', 3)
-                .attr('stroke-width', 1);
+                .attr('r', 4)
+
+              // 获取当前元素
+              const circle = d3.select(this);
               
+              // 创建或更新tooltip
+              const tooltipContent = circle.attr('data-tooltip-content');
+              const tooltip = document.createElement('div');
+              tooltip.className = 'el-tooltip__popper is-dark';
+              tooltip.innerHTML = tooltipContent;
+              
+              // 获取circle的位置
+              const circleRect = this.getBoundingClientRect();
+              
+              // 设置tooltip位置
+              tooltip.style.position = 'fixed';
+              tooltip.style.left = `${circleRect.left + circleRect.width + 10}px`;
+              tooltip.style.top = `${circleRect.top - 10}px`;
+              
+              // 存储tooltip引用
+              this._tooltip = tooltip;
+              
+              // 添加延迟显示
+              this._tooltipTimeout = setTimeout(() => {
+                // 添加到body
+                document.body.appendChild(tooltip);
+              }, 300);
+
               // 清除之前的详细视图
               detailGroup.selectAll('*').remove();
               
@@ -573,14 +621,23 @@ const createOverviewChart = (data, container) => {
               } else {
                 console.warn('User group not found:', `.user-${dataPoint.userId}`);
               }
-
-
             })
             .on('mouseout', function() {
               // 恢复异常点大小
               d3.select(this)
                 .attr('r', 2)
-                .attr('stroke-width', 0.3);
+              
+              // 清除延迟显示定时器
+              if (this._tooltipTimeout) {
+                clearTimeout(this._tooltipTimeout);
+                this._tooltipTimeout = null;
+              }
+              
+              // 移除tooltip
+              if (this._tooltip) {
+                this._tooltip.remove();
+                this._tooltip = null;
+              }
               
               // 隐藏详细视图
               detailGroup.style('display', 'none');
@@ -606,15 +663,15 @@ const createOverviewChart = (data, container) => {
               datasetStore.setSelectedView(null);
             });
           
-          // 修改鼠标悬停提示
-          outlierGroup.append('title')
-            .text(d => {
-              let text = `User: ${dataPoint.userId}\nWeekday: ${dataPoint.weekdayName}\nValue: ${dataPoint.value.toFixed(2)}`;
-              if (dataPoint.annotations && dataPoint.annotations.length > 0) {
-                text += `\nAnnotations: ${dataPoint.annotations.join(', ')}`;
-              }
-              return text;
-            });
+          // // 修改鼠标悬停提示
+          // outlierGroup.append('title')
+          //   .text(d => {
+          //     let text = `User: ${dataPoint.userId}\nWeekday: ${dataPoint.weekdayName}\nValue: ${dataPoint.value.toFixed(2)}`;
+          //     if (dataPoint.annotations && dataPoint.annotations.length > 0) {
+          //       text += `\nAnnotations: ${dataPoint.annotations.join(', ')}`;
+          //     }
+          //     return text;
+          //   });
         }
       }
     });
@@ -707,13 +764,6 @@ const showUserDayDetail = (data, userId, day, detailGroup, width, height, aggreg
   const dayData = userData.data.slice(startIndex, endIndex);
   
   if (dayData.length === 0) {
-    detailGroup.append('text')
-      .attr('class', 'detail-line')
-      .attr('x', width / 2)
-      .attr('y', height / 2)
-      .attr('text-anchor', 'middle')
-      .attr('fill', 'red')
-      .text('该天无数据');
     return;
   }
   
@@ -1493,3 +1543,36 @@ watch(() => datasetStore.getSelectedUserId, (newUserId) => {
 //   console.log(`拖拽中 - 用户ID: ${userId}, 工作日: ${weekdayName} (${weekday}), 在EditView上方: ${isOverEditView}`);
 // };
 </script>
+
+<style>
+/* 添加tooltip样式 */
+.tooltip-content {
+  background-color: #F5F2FE;
+  padding: 8px 12px;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  max-width: 300px;
+  z-index: 9999;
+  position: fixed;
+  pointer-events: none;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tooltip-row {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.tooltip-row .label {
+  color: #666;
+  white-space: nowrap;
+}
+
+.tooltip-row .value {
+  color: #333;
+  font-weight: 500;
+  word-break: break-word;
+}
+</style>
