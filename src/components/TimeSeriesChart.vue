@@ -643,8 +643,9 @@ const initChart = () => {
       .selectAll('text')
       .style('font-size', '10px')
       .style('fill', '#666')
-      .attr('dx', '0')
-      .attr('dy', '0.3em');
+      .attr('dx', '-5')
+      .attr('dy', '0.3em')
+      .style('text-anchor', 'end');
       
     g.select('.y-axis').select('path.domain')
       .style('stroke', '#aaa')

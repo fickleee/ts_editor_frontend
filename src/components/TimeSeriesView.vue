@@ -276,9 +276,9 @@ const getChildSeries = computed(() => {
 
     // 定义序列类型的排序顺序
     const typeOrder = {
-      'hf': 1,  // HF 排在最前面
+      'lf': 1,  // LF 排在最前面
       'mf': 2,  // MF 排在中间
-      'lf': 3   // LF 排在最后
+      'hf': 3   // HF 排在最后
     };
 
     // 根据类型排序
@@ -292,7 +292,7 @@ const getChildSeries = computed(() => {
 <template>
   <div 
     class="time-series-item p-4 cursor-pointer transition-all duration-200 relative"
-    :class="{ 'bg-purple-50 border-l-4 border-purple-500': isSelected }"
+    :class="{ 'bg-[#F5F2FE] border-l-4 border-[#8B5FFF]': isSelected }"
     @click="handleClick"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
@@ -302,7 +302,7 @@ const getChildSeries = computed(() => {
       <span :class="getTypeClass(series.type)" class="font-bold ml-[100px]">
         {{ series.type || 'original' }}
       </span>
-      <span class="text-sm text-gray-500">{{ series.id }}</span>
+      <span class="text-sm text-gray-700 font-semibold">{{ series.id }}</span>
       
       <button 
         @click.stop="deleteSeries"
@@ -314,7 +314,7 @@ const getChildSeries = computed(() => {
       
       <button 
         @click.stop="exportSeries"
-        class="text-sm px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 flex items-center gap-1"
+        class="text-sm px-2 py-1  hover:bg-gray-100 flex items-center gap-1"
         title="Export as CSV"
       >
         <img src="/src/assets/Export_series.svg" alt="Export" class="w-4 h-4" />
@@ -357,7 +357,7 @@ const getChildSeries = computed(() => {
         </button>
         
         <!-- 子序列箭头 - 保持水平箭头位置，进一步延长垂直线 -->
-        <div v-if="['hf', 'mf', 'high_freq', 'mid_freq'].includes(series.type)" 
+        <div v-if="['lf', 'mf', 'low_freq', 'mid_freq'].includes(series.type)" 
           class="ml-auto mr-4" style="position: absolute; right: 4px; z-index: 10;">
           
           <!-- 垂直线SVG - 从顶部到箭头位置 -->
@@ -374,7 +374,7 @@ const getChildSeries = computed(() => {
           </svg>
         </div>
         
-        <div v-if="['lf', 'low_freq'].includes(series.type)" 
+        <div v-if="['hf', 'high_freq'].includes(series.type)" 
         class="ml-auto mr-4" style="position: absolute; right: 4px; z-index: 10;">
           
           <!-- 垂直线SVG - 从顶部到箭头位置 -->
@@ -415,12 +415,12 @@ const getChildSeries = computed(() => {
             <button 
               @click="isDecompNumberOpen = !isDecompNumberOpen"
               style="color: #A15BFA; border-bottom: 2px solid #A15BFA; height: 26px; line-height: 26px;"
-              class="flex items-center justify-between min-w-[45px] hover:text-purple-600 transition-colors duration-200 ml-1"
+              class="flex items-center justify-between min-w-[45px] hover:text-[#8B5FFF] transition-colors duration-200 ml-1"
             >
               <span class="text-sm font-semibold flex-1 text-center">{{ decompositionNumber }}</span>
               <!-- 下拉箭头 -->
               <svg 
-                class="h-4 w-4 transition-transform duration-200 flex-shrink-0 text-purple-600 ml-1"
+                class="h-4 w-4 transition-transform duration-200 flex-shrink-0 text-[#8B5FFF] ml-1"
                 :class="{ 'rotate-180': isDecompNumberOpen }"
                 viewBox="0 0 20 20"
                 fill="currentColor"
@@ -438,7 +438,7 @@ const getChildSeries = computed(() => {
                 decompositionNumber = num;
                 isDecompNumberOpen = false;
               }"
-              class="w-full px-3 py-1.5 text-center text-xs hover:text-purple-600 text-gray-700"
+              class="w-full px-3 py-1.5 text-center text-xs hover:text-[#8B5FFF] text-gray-700"
             >
               {{ num }}
             </button>
@@ -452,12 +452,12 @@ const getChildSeries = computed(() => {
             <button 
               @click="isModelOpen = !isModelOpen"
               style="color: #A15BFA; border-bottom: 2px solid #A15BFA; height: 26px; line-height: 26px;"
-              class="flex items-center justify-between min-w-[80px] hover:text-purple-600 transition-colors duration-200 ml-2"
+              class="flex items-center justify-between min-w-[80px] hover:text-[#8B5FFF] transition-colors duration-200 ml-2"
             >
               <span class="text-sm font-semibold flex-1 text-center">{{ model }}</span>
               <!-- 下拉箭头 -->
               <svg 
-                class="h-4 w-4 transition-transform duration-200 flex-shrink-0 text-purple-600 ml-1"
+                class="h-4 w-4 transition-transform duration-200 flex-shrink-0 text-[#8B5FFF] ml-1"
                 :class="{ 'rotate-180': isModelOpen }"
                 viewBox="0 0 20 20"
                 fill="currentColor"
@@ -475,7 +475,7 @@ const getChildSeries = computed(() => {
                 model = option;
                 isModelOpen = false;
               }"
-              class="w-full px-3 py-1.5 text-center text-xs hover:text-purple-600 text-gray-700"
+              class="w-full px-3 py-1.5 text-center text-xs hover:text-[#8B5FFF] text-gray-700"
             >
               {{ option }}
             </button>
@@ -497,7 +497,7 @@ const getChildSeries = computed(() => {
               '--el-color-primary': '#A15BFA'
             }"
           />
-          <span class="text-sm font-semibold text-purple-600 min-w-[20px] text-center ml-1">{{ level }}</span>
+          <span class="text-sm font-semibold text-[#8B5FFF] min-w-[20px] text-center ml-1">{{ level }}</span>
         </div>
         
         <!-- 操作按钮 -->
@@ -519,7 +519,7 @@ const getChildSeries = computed(() => {
           </button>
         </div>
       </div>
-      <div v-if="isDecomposing" class="text-xs text-purple-600 text-center mt-0.5">Processing...</div>
+      <div v-if="isDecomposing" class="text-xs text-[#8B5FFF] text-center mt-0.5">Processing...</div>
     </div>
 
     <!-- 子序列框直接显示在原序列下方 -->
@@ -537,7 +537,7 @@ const getChildSeries = computed(() => {
 
 .time-series-tag.original {
   background-color: #F3F3F3;
-  color: #B2B2B2;
+  color: #707070;
 }
 
 .time-series-tag.lf {

@@ -43,6 +43,15 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const existingSeries = series.value.find(s => s.id === newSeries.id);
     if (!existingSeries) {
       series.value.push(newSeries);
+      
+      // 确保子序列始终保持正确的排序顺序
+      const typeOrder = { 'lf': 1, 'mf': 2, 'hf': 3 };
+      series.value.sort((a, b) => {
+        if (a.parentId && b.parentId && a.parentId === b.parentId) {
+          return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
+        }
+        return 0; // 如果不是同一个父级的子序列，保持原有顺序
+      });
     } else {
       Object.assign(existingSeries, newSeries);
     }
@@ -381,8 +390,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const datasetStore = useDatasetStore()
     const originalDataset = datasetStore.getOriginalData
     
-    console.log('开始寻找相似模式, 数据集大小:', originalDataset ? originalDataset.length : 0);
-    
     // 以下是处理当前选中序列的逻辑
     const patterns = []
     
@@ -404,7 +411,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       p.time >= start && p.time <= end
     )
     
-    console.log('源模式: 时间范围=' + start.toFixed(2) + '-' + end.toFixed(2) + ', 边界值: 左=' + leftValue.toFixed(2) + ', 右=' + rightValue.toFixed(2));
     
     // 从数据集中搜索相似模式
     const maxPossibleDiff = 200 // 可能的最大差异值
@@ -472,7 +478,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
           // 排序数据
           dateData.sort((a, b) => a.time - b.time);
           
-          console.log(`处理用户${userData.id}的${dateStr}数据: ${dateData.length}个点, 范围${dateData[0].time.toFixed(2)}-${dateData[dateData.length-1].time.toFixed(2)}`);
           
           // 对每个日期的数据进行模式匹配
           const datasetStep = Math.max(1, Math.floor(dateData.length / 200));
@@ -562,13 +567,9 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         }
       }
       
-      console.log('处理用户数:', Object.keys(matchedDateDistribution).length);
-      console.log('匹配模式日期分布:', matchedDateDistribution);
     }
 
-    // 排序并返回结果
-    console.log(`共找到 ${patterns.length} 个匹配模式`);
-    patterns.sort((a, b) => b.similarity - a.similarity);
+    // 排序并返回结果    patterns.sort((a, b) => b.similarity - a.similarity);
     
     // 只返回来自数据集的匹配模式
     return patterns.filter(pattern => pattern.sourceType === 'dataset').slice(0, 10);
@@ -899,7 +900,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     
     operationIndex.value--;
     
-    console.log(`Undid operation: ${operation.type}`);
   }
 
   const redo = () => {
@@ -920,7 +920,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       });
     }
     
-    console.log(`Redid operation: ${operation.type}`);
   }
 
   const canUndo = computed(() => operationIndex.value >= 0);
@@ -1165,10 +1164,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       operations.value = operations.value.slice(0, operationIndex.value + 1);
     }
     
-    if (!beforeData || !afterData) {
-      console.warn(`Batch operation ${type} recorded with incomplete data`);
-    }
-    
     const operation = {
       id: Date.now() + Math.random().toString(36).substring(2, 9),
       timestamp: new Date().toISOString(),
@@ -1187,8 +1182,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     }
     
     operationIndex.value = operations.value.length - 1;
-    
-    console.log(`Recorded batch operation: ${type}`);
   };
 
   const convertTimeStringToHours = (timeStr) => {
@@ -1213,7 +1206,6 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
             // 确保时间范围在0-24小时内
             const decimalHours = hours + (minutes / 60) + (seconds / 3600);
             
-            console.log(`时间转换(日期时间): "${timeStr}" => ${decimalHours.toFixed(4)}小时`);
             return decimalHours;
           }
         }
@@ -1229,12 +1221,10 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         // 确保时间范围在0-24小时内
         const decimalHours = hours + (minutes / 60) + (seconds / 3600);
         
-        console.log(`时间转换(标准时间): "${timeStr}" => ${decimalHours.toFixed(4)}小时`);
         return decimalHours;
       }
     }
     
-    console.warn(`无法解析的时间格式: ${timeStr}, 类型: ${typeof timeStr}`);
     return 0;
   };
 

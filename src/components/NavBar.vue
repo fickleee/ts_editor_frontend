@@ -438,124 +438,7 @@ const handleSyncClick = () => {
   }, 0);
 };
 
-// 修改导出编辑历史函数
-const exportEditHistory = () => {
-  const history = timeSeriesStore.exportEditHistory();
-  
-  // 格式化为新的数据结构
-  const formattedOperations = history.operations.map(op => {
-    // 从操作的第一个seriesId中提取用户ID和日期
-    let userId = '';
-    let dateStr = '';
-    
-    if (op.seriesIds && op.seriesIds.length > 0) {
-      const seriesId = op.seriesIds[0];
-      
-      // 尝试各种可能的ID格式模式匹配
-      // 匹配形如 user_34_2016-2-16 或 user34_2016-2-16
-      const fullMatch = seriesId.match(/^user[_]?(\d+)[_]?(\d{4}[-]?\d{1,2}[-]?\d{1,2})$/);
-      // 匹配仅用户ID，如 user_34
-      const userOnlyMatch = seriesId.match(/^user[_]?(\d+)$/);
-      
-      if (fullMatch) {
-        userId = fullMatch[1]; // 提取数字部分
-        dateStr = fullMatch[2]; // 提取日期部分
-      } else if (userOnlyMatch) {
-        userId = userOnlyMatch[1];
-        dateStr = new Date().toISOString().split('T')[0]; // 使用当前日期作为后备
-      } else {
-        // 如果不匹配预期格式，保留原始ID
-        userId = seriesId;
-        dateStr = new Date().toISOString().split('T')[0]; // 使用当前日期作为后备
-      }
-    }
-    
-    // 将操作时间范围转换为HH:MM格式（精度设置为分钟）
-    let startTime = "00:00";
-    let endTime = "00:00";
-    
-    if (op.timeRange) {
-      startTime = convertDecimalHoursToHHMM(op.timeRange.start);
-      endTime = convertDecimalHoursToHHMM(op.timeRange.end);
-    }
-    
-    // 格式化日期时间
-    const timestamp = new Date(op.timestamp);
-    const formattedDateTime = timestamp.toISOString().replace('T', ' ').substring(0, 19);
-    
-    // 提取操作前后的值
-    let valuesBefore = [];
-    let valuesAfter = [];
-    
-    if (op.beforeData && op.afterData && op.seriesIds && op.seriesIds.length > 0) {
-      const seriesId = op.seriesIds[0];
-      
-      if (op.beforeData[seriesId] && op.timeRange) {
-        // 过滤出时间范围内的值
-        valuesBefore = op.beforeData[seriesId]
-          .filter(point => point && point.time >= op.timeRange.start && point.time <= op.timeRange.end)
-          .map(point => point.value);
-      }
-      
-      if (op.afterData[seriesId] && op.timeRange) {
-        valuesAfter = op.afterData[seriesId]
-          .filter(point => point && point.time >= op.timeRange.start && point.time <= op.timeRange.end)
-          .map(point => point.value);
-      }
-    }
-    
-    // 构建结果对象
-    const result = {
-      id: userId,
-      date: dateStr,
-      start_time: startTime,
-      end_time: endTime,
-      operation: op.type,
-      value_before_edit: valuesBefore,
-      value_after_edit: valuesAfter
-    };
-    
-    // 针对move-x操作，记录移动后的区间范围
-    if (op.type === 'move-x' && op.params && op.params.offset && op.timeRange) {
-      const movedStart = op.timeRange.start + op.params.offset.x;
-      const movedEnd = op.timeRange.end + op.params.offset.x;
-      
-      result.after_move_start_time = convertDecimalHoursToHHMM(movedStart);
-      result.after_move_end_time = convertDecimalHoursToHHMM(movedEnd);
-    }
-    
-    return result;
-  });
-  
-  // 过滤掉没有前后值数据的操作记录
-  const validOperations = formattedOperations.filter(
-    op => op.value_before_edit.length > 0 || op.value_after_edit.length > 0
-  );
-  
-  // 转换为JSON字符串
-  const historyJson = JSON.stringify(validOperations, null, 2);
-  
-  // 创建下载
-  const blob = new Blob([historyJson], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  
-  // 创建下载链接
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `time-series-edit-history-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  
-  // 清理
-  setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 100);
-  
-  ElMessage.success('编辑历史已成功导出');
-};
-
-// 添加辅助函数：将小数形式的小时转换为HH:MM格式（精度为分钟）
+// 修改辅助函数：将小数形式的小时转换为HH:MM格式（不包含秒）
 const convertDecimalHoursToHHMM = (decimalHours) => {
   if (decimalHours === null || decimalHours === undefined || isNaN(decimalHours)) {
     return "00:00";
@@ -572,6 +455,138 @@ const convertDecimalHoursToHHMM = (decimalHours) => {
   const formattedMinutes = String(minutes).padStart(2, '0');
   
   return `${formattedHours}:${formattedMinutes}`;
+};
+
+// 修改导出编辑历史函数，使用新的时间格式函数
+const exportEditHistory = () => {
+  // 获取编辑历史的副本，而不是直接使用原始历史
+  const history = JSON.parse(JSON.stringify(timeSeriesStore.exportEditHistory()));
+  
+  // 格式化为新的数据结构
+  const formattedOperations = history.operations.map(op => {
+    // 收集所有被编辑序列的数据
+    const allSeriesData = [];
+    
+    // 处理每个被编辑的序列
+    if (op.seriesIds && op.seriesIds.length > 0) {
+      op.seriesIds.forEach(seriesId => {
+        // 从seriesId中提取用户ID和日期
+        const fullMatch = seriesId.match(/^user[_]?(\d+)[_]?(\d{4}[-]?\d{1,2}[-]?\d{1,2})$/);
+        const userOnlyMatch = seriesId.match(/^user[_]?(\d+)$/);
+        
+        let userId = '';
+        let dateStr = '';
+        
+        if (fullMatch) {
+          userId = fullMatch[1];
+          dateStr = fullMatch[2];
+        } else if (userOnlyMatch) {
+          userId = userOnlyMatch[1];
+          dateStr = new Date().toISOString().split('T')[0];
+        } else {
+          userId = seriesId;
+          dateStr = new Date().toISOString().split('T')[0];
+        }
+        
+        // 获取该序列的操作前后数据
+        let valuesBefore = [];
+        let valuesAfter = [];
+        
+        if (op.beforeData && op.afterData && op.beforeData[seriesId] && op.afterData[seriesId]) {
+          if (op.timeRange) {
+            valuesBefore = op.beforeData[seriesId]
+              .filter(point => point && point.time >= op.timeRange.start && point.time <= op.timeRange.end)
+              .map(point => point.value);
+            
+            valuesAfter = op.afterData[seriesId]
+              .filter(point => point && point.time >= op.timeRange.start && point.time <= op.timeRange.end)
+              .map(point => point.value);
+          }
+        }
+        
+        // 添加到序列数据集合中
+        allSeriesData.push({
+          id: userId,
+          date: dateStr,
+          valuesBefore,
+          valuesAfter
+        });
+      });
+    }
+    
+    // 构建时间范围
+    let rangeBefore = [];
+    let rangeAfter = [];
+    
+    if (op.timeRange) {
+      if (op.type === 'move-x') {
+        // 对于move-x操作，使用初始状态的时间范围
+        if (op.params && op.params.initialState && op.params.initialState.timeRange) {
+          rangeBefore = [[
+            convertDecimalHoursToHHMM(op.params.initialState.timeRange.start),
+            convertDecimalHoursToHHMM(op.params.initialState.timeRange.end)
+          ]];
+          
+          rangeAfter = [[
+            convertDecimalHoursToHHMM(op.timeRange.start),
+            convertDecimalHoursToHHMM(op.timeRange.end)
+          ]];
+        }
+      } else if (op.type === 'expand' && op.params && op.params.selections) {
+        // 对于expand操作，包含所有选择的范围
+        rangeBefore = op.params.selections.map(sel => [
+          convertDecimalHoursToHHMM(sel.start),
+          convertDecimalHoursToHHMM(sel.end)
+        ]);
+        rangeAfter = [...rangeBefore];
+      } else {
+        // 其他操作使用标准时间范围
+        const timeRange = [
+          convertDecimalHoursToHHMM(op.timeRange.start),
+          convertDecimalHoursToHHMM(op.timeRange.end)
+        ];
+        rangeBefore = [timeRange];
+        rangeAfter = [timeRange];
+      }
+    }
+    
+    // 构建最终的操作记录
+    return {
+      operation: op.type === 'replace' ? 'removal' : op.type,
+      series: allSeriesData.map(seriesData => ({
+        id: seriesData.id,
+        date: seriesData.date,
+        range_before: rangeBefore,
+        range_after: rangeAfter,
+        value_before_edit: seriesData.valuesBefore,
+        value_after_edit: seriesData.valuesAfter
+      }))
+    };
+  });
+  
+  // 过滤掉没有有效数据的操作记录
+  const validOperations = formattedOperations.filter(
+    op => op.series && op.series.length > 0 && 
+    op.series.some(s => s.value_before_edit.length > 0 || s.value_after_edit.length > 0)
+  );
+  
+  // 转换为JSON字符串并下载
+  const historyJson = JSON.stringify(validOperations, null, 2);
+  const blob = new Blob([historyJson], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `time-series-edit-history-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
+  
+  ElMessage.success('export successfully');
 };
 </script> 
 
@@ -591,3 +606,4 @@ const convertDecimalHoursToHHMM = (decimalHours) => {
   -o-user-drag: none;
 }
 </style>
+

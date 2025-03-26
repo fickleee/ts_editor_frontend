@@ -41,7 +41,7 @@ const normalizeData = (data) => {
   }));
 }
 
-const drawChart = () => {
+const initChart = () => {
   if (!chartRef.value || !props.pattern || !props.pattern.data) return;
   
   // 清除现有图表
@@ -106,16 +106,16 @@ const drawChart = () => {
 
 // 监听模式变化，重绘图表
 watch(() => props.pattern, () => {
-  nextTick(() => drawChart());
+  nextTick(() => initChart());
 }, { deep: true });
 
 // 组件挂载时绘制图表
 onMounted(() => {
-  drawChart();
+  initChart();
   
   // 添加窗口大小变化监听
   const resizeObserver = new ResizeObserver(() => {
-    drawChart();
+    initChart();
   });
   
   if (chartRef.value) {

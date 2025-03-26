@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import * as d3 from 'd3'
+import { THEME_COLOR } from '../utils/constants'
 
 const props = defineProps({
   visible: Boolean,
@@ -296,7 +297,7 @@ const initChart = () => {
     .attr('class', 'curve')
     .attr('d', line)
     .attr('fill', 'none')
-    .attr('stroke', '#7C3AED') // 紫色
+    .attr('stroke', THEME_COLOR)
     .attr('stroke-width', 3)
     .attr('stroke-linecap', 'round')
 
@@ -330,7 +331,7 @@ const initChart = () => {
     .attr('cx', d => xScale(d.x))
     .attr('cy', d => yScale(d.y))
     .attr('r', 6)
-    .attr('fill', '#7C3AED')
+    .attr('fill', THEME_COLOR)
     .attr('stroke', '#FFFFFF')
     .attr('stroke-width', 2);
     
@@ -344,7 +345,7 @@ const initChart = () => {
     .attr('cx', 12)
     .attr('cy', 12)
     .attr('r', 12)
-    .attr('fill', '#7C3AED')
+    .attr('fill', THEME_COLOR)
     .attr('cursor', 'pointer')
     .on('click', addControlPoint)
   
@@ -363,7 +364,7 @@ const initChart = () => {
     .attr('cx', 40)
     .attr('cy', 12)
     .attr('r', 12)
-    .attr('fill', '#7C3AED')
+    .attr('fill', THEME_COLOR)
     .attr('cursor', 'pointer')
     .on('click', removeControlPoint)
   
@@ -381,7 +382,7 @@ const initChart = () => {
 // 修改applyPreset函数，移除与TimeSeriesEditor重复的预设
 const applyPreset = (preset) => {
   switch (preset) {
-    case 'uniform-double':
+    case 'double':
       controlPoints.value = [
         { x: 0, y: 2 },
         { x: 0.33, y: 2 },
@@ -389,7 +390,7 @@ const applyPreset = (preset) => {
         { x: 1, y: 2 }
       ]
       break
-    case 'uniform-half':
+    case 'half':
       controlPoints.value = [
         { x: 0, y: 0.5 },
         { x: 0.33, y: 0.5 },
@@ -397,49 +398,45 @@ const applyPreset = (preset) => {
         { x: 1, y: 0.5 }
       ]
       break
-    // 这些预设与TimeSeriesEditor中的预设重复，保留以支持父组件调用
     case 'ease-in':
-    case 'ease-out': 
+      controlPoints.value = [
+        { x: 0, y: 0.2 },
+        { x: 0.25, y: 0.4 },
+        { x: 0.75, y: 1.6 },
+        { x: 1, y: 2 }
+      ]
+      break
+    case 'ease-out':
+      controlPoints.value = [
+        { x: 0, y: 2 },
+        { x: 0.25, y: 1.6 },
+        { x: 0.75, y: 0.4 },
+        { x: 1, y: 0.2 }
+      ]
+      break
     case 'ease-in-out':
+      controlPoints.value = [
+        { x: 0, y: 0.2 },
+        { x: 0.25, y: 0.4 },
+        { x: 0.75, y: 1.6 },
+        { x: 1, y: 1.8 }
+      ]
+      break
     case 's-curve':
+      controlPoints.value = [
+        { x: 0, y: 0.2 },
+        { x: 0.25, y: 1.8 },
+        { x: 0.75, y: 0.2 },
+        { x: 1, y: 1.8 }
+      ]
+      break
     case 'step':
-      // 在这里处理父组件中定义的预设
-      if (preset === 'ease-in') {
-        controlPoints.value = [
-          { x: 0, y: 0.2 },
-          { x: 0.25, y: 0.4 },
-          { x: 0.75, y: 1.6 },
-          { x: 1, y: 2 }
-        ]
-      } else if (preset === 'ease-out') {
-        controlPoints.value = [
-          { x: 0, y: 2 },
-          { x: 0.25, y: 1.6 },
-          { x: 0.75, y: 0.4 },
-          { x: 1, y: 0.2 }
-        ]
-      } else if (preset === 'ease-in-out') {
-        controlPoints.value = [
-          { x: 0, y: 0.2 },
-          { x: 0.25, y: 0.4 },
-          { x: 0.75, y: 1.6 },
-          { x: 1, y: 1.8 }
-        ]
-      } else if (preset === 's-curve') {
-        controlPoints.value = [
-          { x: 0, y: 0.2 },
-          { x: 0.25, y: 1.8 },
-          { x: 0.75, y: 0.2 },
-          { x: 1, y: 1.8 }
-        ]
-      } else if (preset === 'step') {
-        controlPoints.value = [
-          { x: 0, y: 0.5 },
-          { x: 0.499, y: 0.5 },
-          { x: 0.501, y: 1.5 },
-          { x: 1, y: 1.5 }
-        ]
-      }
+      controlPoints.value = [
+        { x: 0, y: 0.5 },
+        { x: 0.499, y: 0.5 },
+        { x: 0.501, y: 1.5 },
+        { x: 1, y: 1.5 }
+      ]
       break
     default:
       resetCurve();
@@ -483,29 +480,10 @@ defineExpose({
 
 <template>
   <div class="curve-editor h-full flex flex-col">
-    <!-- 简化预设按钮，只保留两个主要的 -->
-    <div class="flex-none mb-4 pb-2 border-b border-gray-200">
-      <div class="flex flex-wrap gap-2 items-center">
-        <button 
-          v-for="preset in ['uniform-double', 'uniform-half']"
-          :key="preset"
-          @click="applyPreset(preset)"
-          class="px-3 py-1 text-xs bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
-        >
-          {{ 
-            preset === 'uniform-double' ? 'Double (200%)' : 
-            preset === 'uniform-half' ? 'Half (50%)' : preset 
-          }}
-        </button>
-      </div>
-    </div>
-    
     <!-- 图表区域 -->
     <div class="flex-1 overflow-hidden relative">
       <svg ref="svgRef" class="w-full h-full"></svg>
     </div>
-    
-   
   </div>
 </template>
 

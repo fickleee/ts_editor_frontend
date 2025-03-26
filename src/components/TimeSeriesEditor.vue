@@ -6,7 +6,7 @@ import TimeSeriesChart from './TimeSeriesChart.vue'
 import TimeSeriesView from './TimeSeriesView.vue'
 import CurveEditor from './CurveEditor.vue'
 import { ElMessage } from 'element-plus'
-import { BORDER_WIDTH, BORDER_COLOR } from '../utils/constants'
+import { BORDER_WIDTH, BORDER_COLOR, THEME_COLOR } from '../utils/constants'
 import { generateHouseData } from '../utils/generateData'
 import PatternChart from './PatternChart.vue'
 
@@ -109,10 +109,26 @@ const selectTool = (toolId) => {
         selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries
       );
       
+      // 获取实际应用的偏移量
+      let effectiveOffset = { x: 0, y: 0 };
+      
+      if (toolId === 'move-x' && store.selectedTimeRange) {
+        // 计算实际位移
+        const initialRange = initialSeriesState.value.timeRange;
+        const finalRange = store.selectedTimeRange;
+        
+        if (initialRange && finalRange) {
+          effectiveOffset.x = finalRange.start - initialRange.start;
+        }
+      }
+      
       store.recordBatchOperation(
         toolId, 
         selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries,
-        { type: toolId }, 
+        { 
+          type: toolId,
+          offset: effectiveOffset 
+        }, 
         initialSeriesState.value, 
         finalState
       );
@@ -142,9 +158,12 @@ const selectTool = (toolId) => {
     
     if (toolId === 'move-x' || toolId === 'move-y') {
       if (store.selectedTimeRange) {
-        initialSeriesState.value = store.getSeriesSnapshot(
-          selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries
-        );
+        initialSeriesState.value = {
+          timeRange: { ...store.selectedTimeRange },  // 保存初始时间范围
+          series: store.getSeriesSnapshot(
+            selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries
+          )
+        };
       }
     }
   }
@@ -486,6 +505,26 @@ const handleDragEnd = (event) => {
     }
     showSelectionButtons.value = true
   }
+
+  if (activeTool.value === 'move-x' && initialSeriesState.value) {
+    const finalState = store.getSeriesSnapshot(
+      selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries
+    );
+    
+    store.recordBatchOperation(
+      'move-x', 
+      selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries,
+      { 
+        type: 'move-x',
+        initialState: initialSeriesState.value,  // 包含初始时间范围
+        finalTimeRange: store.selectedTimeRange   // 包含最终时间范围
+      }, 
+      initialSeriesState.value.series, 
+      finalState
+    );
+    
+    initialSeriesState.value = null;
+  }
 }
 
 const handleSeriesClick = (seriesId) => {
@@ -743,6 +782,14 @@ watch(() => store.series, () => {
 
 // Add a new ref to store initial series state
 const initialSeriesState = ref(null);
+
+// 添加一个新的计算属性，用于按类型获取子序列
+const getChildSeriesByType = (parentId, type) => {
+  return store.series.filter(s => 
+    s.parentId === parentId && 
+    s.type === type
+  );
+};
 </script>
 
 <template>
@@ -763,7 +810,7 @@ const initialSeriesState = ref(null);
                 @click="selectTool(tool.id)"
                 class="w-[48px] h-[48px] flex items-center justify-center rounded-lg transition-all duration-200 shadow-sm"
                 :class="{
-                  'bg-purple-100 text-purple-700 shadow-md scale-105': tool.active,
+                  'bg-purple-100 text-[#8B5FFF] shadow-md scale-105': tool.active,
                   'text-gray-500 hover:bg-gray-50 hover:scale-105 hover:shadow': !tool.active,
                   'opacity-50 cursor-not-allowed': selectionPending
                 }"
@@ -839,18 +886,24 @@ const initialSeriesState = ref(null);
           <div v-if="showSidePanel" class="w-[30%] border-l border-gray-200 flex flex-col h-full overflow-hidden">
             <template v-if="activeTool === 'curve'">
               <div class="h-full flex flex-col p-6">
-                <h3 class="text-lg font-medium mb-4">Curve Editor</h3>
-                
                 <div class="mb-4">
                   <p class="text-sm text-gray-600 mb-2">Presets:</p>
                   <div class="flex flex-wrap gap-2">
                     <button 
-                      v-for="preset in ['ease-in', 'ease-out', 'ease-in-out', 's-curve', 'step']"
+                      v-for="preset in ['double', 'half', 'ease-in', 'ease-out', 'ease-in-out', 's-curve', 'step']"
                       :key="preset"
                       @click="$refs.curveEditor.applyPreset(preset)"
-                      class="px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
+                      :style="{
+                        backgroundColor: `${THEME_COLOR}10`,
+                        color: THEME_COLOR
+                      }"
+                      class="px-3 py-1 text-xs rounded hover:bg-opacity-20"
                     >
-                      {{ preset.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') }}
+                      {{ 
+                        preset === 'double' ? 'Double (200%)' : 
+                        preset === 'half' ? 'Half (50%)' : 
+                        preset.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') 
+                      }}
                     </button>
                   </div>
                 </div>
@@ -886,15 +939,8 @@ const initialSeriesState = ref(null);
             </template>
 
             <template v-if="activeTool === 'removal'">
-              <div class="h-full flex flex-col overflow-hidden">
-                <div class="flex-none p-6 border-b border-gray-200">
-                  <h3 class="text-lg font-medium">Similar Patterns</h3>
-                  <p class="text-sm text-gray-600 mt-1">
-                    Showing similar patterns from series {{ selectedSeriesId }}
-                  </p>
-                </div>
-                
-                <div class="flex-1 overflow-y-auto p-6">
+              <div class="h-full flex flex-col overflow-hidden">               
+                <el-scrollbar class="flex-1 p-6">
                   <div v-if="generatePatterns.length === 0" class="text-center py-8 text-gray-500">
                     No similar patterns found
                   </div>
@@ -905,8 +951,8 @@ const initialSeriesState = ref(null);
                       :key="`${pattern.start}-${pattern.end}`"
                       class="border rounded-lg p-4 cursor-pointer transition-all duration-200"
                       :class="{
-                        'border-purple-500 bg-purple-50': selectedPattern === pattern,
-                        'border-gray-200 hover:border-purple-300': selectedPattern !== pattern
+                        [`border-[${THEME_COLOR}] bg-[${THEME_COLOR}10]`]: selectedPattern === pattern,
+                        'border-gray-200 hover:border-[${THEME_COLOR}]': selectedPattern !== pattern
                       }"
                       @click="handleGenerateSelect(pattern)"
                     >
@@ -914,7 +960,7 @@ const initialSeriesState = ref(null);
                         <div class="text-sm text-gray-600">
                           <span class="mr-2">Source: {{ pattern.sourceName }}</span>
                         </div>
-                        <div class="text-sm text-purple-600 font-semibold">
+                        <div class="text-sm font-semibold" :style="{ color: THEME_COLOR }">
                           Similarity: {{ (pattern.similarity * 100).toFixed(1) }}%
                         </div>
                       </div>
@@ -929,7 +975,7 @@ const initialSeriesState = ref(null);
                       </div>
                     </div>
                   </div>
-                </div>
+                </el-scrollbar>
                 
                 <div class="flex-none p-6 border-t border-gray-200">
                   <div class="flex justify-end gap-2">
@@ -941,7 +987,11 @@ const initialSeriesState = ref(null);
                     </button>
                     <button
                       @click="handleGenerateApply"
-                      class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                      class="px-4 py-2 rounded hover:opacity-90"
+                      :style="{
+                        backgroundColor: THEME_COLOR,
+                        color: 'white'
+                      }"
                       :disabled="!selectedPattern"
                     >
                       Apply
@@ -965,7 +1015,7 @@ const initialSeriesState = ref(null);
           <div class="flex items-center">
             <!-- View label -->
             <div class="w-[65px] flex justify-center">
-              <span class="text-large to-black">View</span>
+              <span class="text-large font-bold text-black ml-2">View</span>
             </div>
             <!-- Time axis -->
             <div class="flex-1 px-6">
@@ -985,7 +1035,14 @@ const initialSeriesState = ref(null);
         <el-scrollbar class="flex-1 pt-0 pb-4">
           <!-- 当没有序列时显示提示信息 -->
           <div v-if="!store.series.length" class="flex justify-center items-center h-full">
-            <div class="border-2 border-dashed border-[#8B5FFF] rounded-2xl p-10 mx-auto my-4 w-[82%] h-[300px] flex items-center justify-center text-center bg-purple-50 mt-[70px]">
+            <div class="border-2 border-dashed rounded-2xl p-10 mx-auto my-4 w-[82%] h-[300px] flex items-center justify-center text-center mt-[70px]"
+              :style="{ 
+                borderColor: THEME_COLOR, 
+                backgroundColor: `${THEME_COLOR}10`,
+                borderStyle: 'dashed',
+                borderWidth: '2px'
+              }"
+            >
               <p class="text-2xl text-black font-bold tracking-wide">
                 Please drag data in matrix view here to add time series for editing
               </p>
@@ -1006,17 +1063,19 @@ const initialSeriesState = ref(null);
                 @hover="(isHovering) => handleSeriesHover(parentSeries.id, isHovering)"
               />
               
-              <!-- 子序列 -->
-              <TimeSeriesView
-                v-for="childSeries in getChildSeries(parentSeries.id)"
-                :key="childSeries.id"
-                :series="childSeries"
-                :isSelected="selectedSeriesId === childSeries.id"
-                :hoverTime="hoverTime"
-                :timeAxisConfig="timeAxisConfig"
-                @click="handleSeriesClick(childSeries.id)"
-                @hover="(isHovering) => handleSeriesHover(childSeries.id, isHovering)"
-              />
+              <!-- 子序列 - 显式按 lf, mf, hf 顺序渲染 -->
+              <template v-for="type in ['lf', 'mf', 'hf']">
+                <TimeSeriesView
+                  v-for="childSeries in getChildSeriesByType(parentSeries.id, type)"
+                  :key="childSeries.id"
+                  :series="childSeries"
+                  :isSelected="selectedSeriesId === childSeries.id"
+                  :hoverTime="hoverTime"
+                  :timeAxisConfig="timeAxisConfig"
+                  @click="handleSeriesClick(childSeries.id)"
+                  @hover="(isHovering) => handleSeriesHover(childSeries.id, isHovering)"
+                />
+              </template>
             </template>
           </template>
           <div class="h-20"></div>
@@ -1107,5 +1166,31 @@ const initialSeriesState = ref(null);
 
 .source-name {
   font-weight: 500;
+}
+
+/* 添加 Element Plus 滚动条样式 */
+:deep(.el-scrollbar__bar) {
+  z-index: 3;
+}
+
+:deep(.el-scrollbar__wrap) {
+  overflow-x: hidden !important;
+}
+
+:deep(.el-scrollbar__thumb) {
+  background-color: #C0C4CC;
+  opacity: 0.3;
+}
+
+:deep(.el-scrollbar__thumb:hover) {
+  opacity: 0.5;
+}
+
+:deep(.el-scrollbar__bar.is-vertical) {
+  width: 6px;
+}
+
+:deep(.el-scrollbar__bar.is-horizontal) {
+  height: 6px;
 }
 </style>
