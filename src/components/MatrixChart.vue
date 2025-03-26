@@ -409,9 +409,13 @@ const createOverviewChart = (data, container) => {
               `;
               return content;
             })
-            .style('cursor', 'move')
+            .style('cursor', 'grab')
             .call(d3.drag()
               .on('start', function(event, d) {
+                // 修改cursor样式为grabbing
+                // d3.select(this).style('cursor', 'grabbing');
+                document.body.style.cursor = 'grabbing';
+                
                 // 创建拖拽缩略图
                 const dragImage = document.createElement('div');
                 dragImage.className = 'drag-image';
@@ -495,6 +499,10 @@ const createOverviewChart = (data, container) => {
                 }
               })
               .on('end', function(event, d) {
+                // 恢复cursor样式为grab
+                // d3.select(this).style('cursor', 'grab');
+                document.body.style.cursor = 'default';
+                
                 // 移除拖拽缩略图
                 if (this._dragImage) {
                   this._dragImage.remove();
@@ -1143,7 +1151,7 @@ const createLineChart = (data, container, allUserDataByWeek) => {
                 .attr('fill', 'none')
                 .attr('stroke', 'transparent')
                 .attr('stroke-width', 20) // 更宽的区域便于鼠标交互
-                .style('cursor', 'pointer')
+                .style('cursor', 'grab')
                 .on('mouseover', function() {
                   // 高亮当前周数据线
                   weekPath
@@ -1167,7 +1175,163 @@ const createLineChart = (data, container, allUserDataByWeek) => {
                     .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_WIDTH)
                     .attr('stroke-opacity', MATRIX_CHART.OPACITY.WEEK_LINE_NORMAL)
                     .attr('filter', null);
-                });
+                })
+                .call(d3.drag()
+                  .on('start', function(event, d) {
+                    // 修改cursor样式为grabbing
+                    // d3.select(this).style('cursor', 'grabbing');
+                    document.body.style.cursor = 'grabbing';
+                    
+                    // 创建拖拽缩略图
+                    const dragImage = document.createElement('div');
+                    dragImage.className = 'drag-image';
+                    
+                    // 创建SVG元素
+                    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.setAttribute('width', '120');
+                    svg.setAttribute('height', '40');
+                    svg.setAttribute('viewBox', '0 0 120 40');
+                    
+                    // 创建路径
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    
+                    // 计算缩略图的比例尺
+                    const xScale = d3.scaleLinear()
+                      .domain([0, d.length - 1])
+                      .range([10, 110]);
+                    
+                    const yScale = d3.scaleLinear()
+                      .domain([d3.min(d, p => p.value), d3.max(d, p => p.value)])
+                      .range([30, 10]);
+                    
+                    // 创建线生成器
+                    const line = d3.line()
+                      .x((d, i) => xScale(i))
+                      .y(d => yScale(d.value))
+                      .curve(d3.curveMonotoneX);
+                    
+                    // 设置路径数据
+                    path.setAttribute('d', line(d));
+                    path.setAttribute('fill', 'none');
+                    path.setAttribute('stroke', isWeekend ? 
+                      MATRIX_CHART.COLORS.WEEKEND_LINE : 
+                      MATRIX_CHART.COLORS.WEEKDAY_LINE);
+                    path.setAttribute('stroke-width', '2');
+                    
+
+                    
+                    svg.appendChild(path);
+                    dragImage.appendChild(svg);
+                    
+                    document.body.appendChild(dragImage);
+
+                      // 设置初始位置为鼠标的当前位置
+                    dragImage.style.position = 'absolute'; // 确保使用绝对定位
+                    dragImage.style.left = `${event.sourceEvent.clientX + 10}px`;
+                    dragImage.style.top = `${event.sourceEvent.clientY + 10}px`;
+
+                    // 存储拖拽缩略图引用
+                    this._dragImage = dragImage;
+
+                    const editView = document.querySelector('.edit-view');
+                    if (editView) {
+                      // 手动触发 dragenter 事件
+                      const dragEnterEvent = new DragEvent('dragenter', {
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: event.sourceEvent.clientX,
+                        clientY: event.sourceEvent.clientY
+                      });
+                      editView.dispatchEvent(dragEnterEvent);
+                    }
+                  })
+                  .on('drag', function(event, d) {
+                    // 更新拖拽缩略图位置
+                    if (this._dragImage) {
+                      this._dragImage.style.left = `${event.sourceEvent.clientX + 10}px`;
+                      this._dragImage.style.top = `${event.sourceEvent.clientY + 10}px`;
+                    }
+
+                    const editView = document.querySelector('.edit-view');
+                    if (editView) {
+                      const rect = editView.getBoundingClientRect();
+                      const isOverEditView = 
+                        event.sourceEvent.clientX >= rect.left && 
+                        event.sourceEvent.clientX <= rect.right && 
+                        event.sourceEvent.clientY >= rect.top && 
+                        event.sourceEvent.clientY <= rect.bottom;
+
+                      if (isOverEditView) {
+                        // 手动触发 dragover 事件
+                        const dragOverEvent = new DragEvent('dragover', {
+                          bubbles: true,
+                          cancelable: true,
+                          clientX: event.sourceEvent.clientX,
+                          clientY: event.sourceEvent.clientY
+                        });
+                        editView.dispatchEvent(dragOverEvent);
+                      } else {
+                        // 手动触发 dragleave 事件
+                        const dragLeaveEvent = new DragEvent('dragleave', {
+                          bubbles: true,
+                          cancelable: true,
+                          clientX: event.sourceEvent.clientX,
+                          clientY: event.sourceEvent.clientY
+                        });
+                        editView.dispatchEvent(dragLeaveEvent);
+                      }
+                    }
+                  })
+                  .on('end', function(event, d) {
+                    // 恢复cursor样式为grab
+                    // d3.select(this).style('cursor', 'grab');
+                    document.body.style.cursor = 'default';
+                    
+                    // 移除拖拽缩略图
+                    if (this._dragImage) {
+                      this._dragImage.remove();
+                      this._dragImage = null;
+                    }
+
+                    const editView = document.querySelector('.edit-view');
+                    
+                    // 创建并触发全局 dragend 事件
+                    const dragEndEvent = new DragEvent('dragend', {
+                      bubbles: true,
+                      cancelable: true,
+                      clientX: event.sourceEvent.clientX,
+                      clientY: event.sourceEvent.clientY
+                    });
+                    document.dispatchEvent(dragEndEvent);
+
+                    if (editView) {
+                      const rect = editView.getBoundingClientRect();
+                      const isOverEditView = 
+                        event.sourceEvent.clientX >= rect.left && 
+                        event.sourceEvent.clientX <= rect.right && 
+                        event.sourceEvent.clientY >= rect.top && 
+                        event.sourceEvent.clientY <= rect.bottom;
+
+                      if (isOverEditView) {
+                        // 将数据存储到全局变量
+                        window.__draggedData = {
+                          // type: 'anomaly',
+                          userId: user.id,
+                          weekday: weekData.weekday == 6 ? 0 : weekData.weekday + 1
+                        };
+                        
+                        // 手动触发 drop 事件
+                        const dropEvent = new DragEvent('drop', {
+                          bubbles: true,
+                          cancelable: true,
+                          clientX: event.sourceEvent.clientX,
+                          clientY: event.sourceEvent.clientY
+                        });
+                        editView.dispatchEvent(dropEvent);
+                      }
+                    }
+                  })
+                );
             }
           }
         });

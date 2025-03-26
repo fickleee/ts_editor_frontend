@@ -306,13 +306,13 @@ const createScatterPlot = (data) => {
   const maxCount = Math.max(...clusterCounts.values());
   const sizeScale = d3.scaleSqrt()
     .domain([1, maxCount])
-    .range([5, 30]);
+    .range([15, 40]);
     
   // 创建线宽比例尺（基于转移次数）
   const maxTransitionCount = Math.max(...transitionCounts.values(), 1);
   const lineWidthScale = d3.scaleLinear()
     .domain([1, maxTransitionCount])
-    .range([1, 8]);
+    .range([2, 6]);
 
   // 绘制轨迹线的函数
   const drawTrajectory = (userId, date) => {
@@ -453,7 +453,7 @@ const createScatterPlot = (data) => {
           ctx.lineTo(adjustedEndX, adjustedEndY);
           
           // 设置线条样式
-          ctx.strokeStyle = 'rgba(100, 100, 100, 0.6)';
+          ctx.strokeStyle = 'rgba(139, 95, 255, 0.4)';
           ctx.lineWidth = lineWidth;
           ctx.stroke();
         }
@@ -547,7 +547,7 @@ const createScatterPlot = (data) => {
       // 绘制高亮边框
       ctx.beginPath();
       ctx.arc(xScale.value(nearestCenter.x), yScale.value(nearestCenter.y), radius + 2 * t.k, 0, 2 * Math.PI);
-      ctx.strokeStyle = 'black';
+      ctx.strokeStyle = 'rgba(139, 95, 255, 0.7)';
       ctx.lineWidth = 2 * t.k;
       ctx.stroke();
       
