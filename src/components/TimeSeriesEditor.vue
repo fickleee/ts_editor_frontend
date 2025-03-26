@@ -605,14 +605,8 @@ const initializeDefaultData = () => {
 };
 
 onMounted(() => {
-  try {
-    // Try our custom initialization
-    initializeDefaultData();
-  } catch (error) {
-    console.warn('Error in custom initialization:', error);
-    // Fall back to a simpler method or the store's built-in method
-    initializeDefaultData();
-  }
+  // 确保初始化时清空所有数据
+  store.series.splice(0, store.series.length);
   
   // 合并重复的事件监听
   window.addEventListener('add-time-series', (event) => {
@@ -781,7 +775,7 @@ const initialSeriesState = ref(null);
               
               <!-- 只在第1个和第3个按钮后添加分隔线 -->
               <div v-if="index === 1 || index === 3" 
-                   class="w-[24px] h-[1px] bg-[#8B5FFF] my-2">
+                   class="w-[24px] h-0 border-b border-[#8B5FFF] my-2">
               </div>
             </template>
           </div>
@@ -989,29 +983,41 @@ const initialSeriesState = ref(null);
 
         <!-- Scrollable series list -->
         <el-scrollbar class="flex-1 pt-0 pb-4">
-          <!-- 使用计算属性对序列进行分组，将子序列显示在原序列下方 -->
-          <template v-for="parentSeries in organizedSeries" :key="parentSeries.id">
-            <!-- 父序列 -->
-            <TimeSeriesView
-              :series="parentSeries"
-              :isSelected="selectedSeriesId === parentSeries.id"
-              :hoverTime="hoverTime"
-              :timeAxisConfig="timeAxisConfig"
-              @click="handleSeriesClick(parentSeries.id)"
-              @hover="(isHovering) => handleSeriesHover(parentSeries.id, isHovering)"
-            />
-            
-            <!-- 子序列 -->
-            <TimeSeriesView
-              v-for="childSeries in getChildSeries(parentSeries.id)"
-              :key="childSeries.id"
-              :series="childSeries"
-              :isSelected="selectedSeriesId === childSeries.id"
-              :hoverTime="hoverTime"
-              :timeAxisConfig="timeAxisConfig"
-              @click="handleSeriesClick(childSeries.id)"
-              @hover="(isHovering) => handleSeriesHover(childSeries.id, isHovering)"
-            />
+          <!-- 当没有序列时显示提示信息 -->
+          <div v-if="!store.series.length" class="flex justify-center items-center h-full">
+            <div class="border-2 border-dashed border-[#8B5FFF] rounded-2xl p-10 mx-auto my-4 w-[82%] h-[300px] flex items-center justify-center text-center bg-purple-50 mt-[70px]">
+              <p class="text-2xl text-black font-bold tracking-wide">
+                Please drag data in matrix view here to add time series for editing
+              </p>
+            </div>
+          </div>
+          
+          <!-- 有序列时显示序列列表 -->
+          <template v-else>
+            <!-- 使用计算属性对序列进行分组，将子序列显示在原序列下方 -->
+            <template v-for="parentSeries in organizedSeries" :key="parentSeries.id">
+              <!-- 父序列 -->
+              <TimeSeriesView
+                :series="parentSeries"
+                :isSelected="selectedSeriesId === parentSeries.id"
+                :hoverTime="hoverTime"
+                :timeAxisConfig="timeAxisConfig"
+                @click="handleSeriesClick(parentSeries.id)"
+                @hover="(isHovering) => handleSeriesHover(parentSeries.id, isHovering)"
+              />
+              
+              <!-- 子序列 -->
+              <TimeSeriesView
+                v-for="childSeries in getChildSeries(parentSeries.id)"
+                :key="childSeries.id"
+                :series="childSeries"
+                :isSelected="selectedSeriesId === childSeries.id"
+                :hoverTime="hoverTime"
+                :timeAxisConfig="timeAxisConfig"
+                @click="handleSeriesClick(childSeries.id)"
+                @hover="(isHovering) => handleSeriesHover(childSeries.id, isHovering)"
+              />
+            </template>
           </template>
           <div class="h-20"></div>
         </el-scrollbar>

@@ -22,17 +22,21 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
 
   const editedSeriesData = ref([]);
 
+  const clearAllData = () => {
+    series.value = [];
+    operations.value = [];
+    operationIndex.value = -1;
+    selectedTimeRange.value = null;
+    selectedSeries.value = [];
+    previewSeries.value = null;
+    
+    // 清除本地存储，如果有的话
+    localStorage.removeItem('timeSeriesData');
+  }
+
   const initializeData = () => {
-    const defaultSeries = ['Default 1', 'Default 2', 'Default 3']
-    defaultSeries.forEach((name, index) => {
-      const data = generateHouseData(1)
-      addSeries({
-        id: name,
-        data,
-        type: 'original',
-        visible: true
-      })
-    })
+    // 确保没有默认曲线
+    clearAllData();
   }
 
   const addSeries = (newSeries) => {
