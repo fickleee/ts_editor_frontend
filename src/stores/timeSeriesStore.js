@@ -419,10 +419,20 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     if (originalDataset && originalDataset.length > 0) {
       // 跟踪匹配的日期分布
       const matchedDateDistribution = {}
+      // 跟踪每个用户的匹配计数
+      const userMatchCounts = {}
       
       // 对于每个用户，处理其数据
       for (const userData of originalDataset) {
         if (!userData || !userData.data || !userData.id) continue
+        
+        // 初始化这个用户的匹配计数
+        if (!userMatchCounts[userData.id]) {
+          userMatchCounts[userData.id] = 0;
+        }
+        
+        // 限制每个用户的最大匹配数为3，以确保多样性
+        if (userMatchCounts[userData.id] >= 3) continue;
         
         // 按日期分组数据
         const dataByDate = {}
@@ -563,16 +573,62 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
             
             // 更新日期分布统计
             matchedDateDistribution[dateStr] = (matchedDateDistribution[dateStr] || 0) + 1;
+            
+            // 更新用户匹配计数
+            userMatchCounts[userData.id]++;
           }
         }
       }
       
     }
 
-    // 排序并返回结果    patterns.sort((a, b) => b.similarity - a.similarity);
+    // 确保按相似度进行排序
+    patterns.sort((a, b) => b.similarity - a.similarity);
     
-    // 只返回来自数据集的匹配模式
-    return patterns.filter(pattern => pattern.sourceType === 'dataset').slice(0, 10);
+    // 改进用户多样性 - 尝试从不同用户获取模式
+    const diversePatterns = [];
+    const includedUsers = new Set();
+    
+    // 首先添加相似度最高的模式
+    if (patterns.length > 0) {
+      diversePatterns.push(patterns[0]);
+      includedUsers.add(patterns[0].userId);
+    }
+    
+    // 然后尝试添加来自不同用户的模式，同时保持相似度顺序
+    for (const pattern of patterns) {
+      // 如果已经有这个用户的模式，但我们还没有收集足够多的用户，跳过
+      if (includedUsers.has(pattern.userId) && includedUsers.size < Math.min(5, patterns.length / 2)) {
+        continue;
+      }
+      
+      // 添加这个模式
+      if (!diversePatterns.includes(pattern)) {
+        diversePatterns.push(pattern);
+        includedUsers.add(pattern.userId);
+      }
+      
+      // 如果我们已经有10个模式了，停止
+      if (diversePatterns.length >= 10) {
+        break;
+      }
+    }
+    
+    // 如果我们没有收集到足够的多样性模式，添加更多按相似度排序的模式
+    if (diversePatterns.length < Math.min(10, patterns.length)) {
+      for (const pattern of patterns) {
+        if (!diversePatterns.includes(pattern)) {
+          diversePatterns.push(pattern);
+        }
+        
+        if (diversePatterns.length >= 10) {
+          break;
+        }
+      }
+    }
+    
+    // 最终的结果，确保它仍然按相似度排序
+    return diversePatterns;
   }
 
   const interpolateValue = (data, time) => {

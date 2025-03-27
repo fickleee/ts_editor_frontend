@@ -6,7 +6,7 @@ import TimeSeriesChart from './TimeSeriesChart.vue'
 import TimeSeriesView from './TimeSeriesView.vue'
 import CurveEditor from './CurveEditor.vue'
 import { ElMessage } from 'element-plus'
-import { BORDER_WIDTH, BORDER_COLOR, THEME_COLOR } from '../utils/constants'
+import { BORDER_WIDTH, BORDER_COLOR, THEME_COLOR, THEME_COLOR_HOVER } from '../utils/constants'
 import { generateHouseData } from '../utils/generateData'
 import PatternChart from './PatternChart.vue'
 
@@ -531,20 +531,42 @@ const handleCurveReset = () => {
 const handleGenerateSelect = (pattern) => {
   selectedPattern.value = pattern
   store.setPreviewSeries(pattern)
+  
+  // 在控制台显示详细的相似度信息，方便调试
+  console.log(`Selected pattern with similarity: ${(pattern.similarity * 100).toFixed(2)}%`)
+  console.log(`From user: ${pattern.userId}, date: ${pattern.date}`)
 }
 
 const handleGenerateApply = () => {
-  if (!selectedPattern.value || !selectedSeriesId.value) return
+  if (!selectedPattern.value || !selectedSeriesId.value) {
+    ElMessage.warning('Please select a pattern first')
+    return
+  }
   
+  // 应用模式前记录状态
+  const beforeState = store.getSeriesSnapshot([selectedSeriesId.value])
+  
+  // 应用替换操作
   store.replaceWithPattern(selectedPattern.value, selectedSeriesId.value)
   
+  // 记录操作完成，提供清晰的反馈
+  ElMessage.success(`Pattern from user ${selectedPattern.value.userId} applied successfully`)
+  
+  // 清除选择和预览
   selectedPattern.value = null
   store.clearPreviewSeries()
+  
+  // 关闭工具
+  activeTool.value = null
+  tools.value.forEach(tool => tool.active = false)
 }
 
 const handleGenerateReset = () => {
   selectedPattern.value = null
   store.clearPreviewSeries()
+  
+  // 清晰的用户反馈
+  ElMessage.info('Pattern selection cancelled')
 }
 
 const handleDragStart = (point) => {
@@ -860,6 +882,14 @@ const getChildSeriesByType = (parentId, type) => {
     s.type === type
   );
 };
+
+// Add this function to get a color based on similarity value
+const getSimilarityColor = (similarity) => {
+  if (similarity >= 0.9) return '#7C3AED'; // 深紫色 - 最高相似度
+  if (similarity >= 0.8) return THEME_COLOR; // 标准主题色 - 高相似度
+  if (similarity >= 0.7) return THEME_COLOR_HOVER; // 浅紫色 - 中等相似度
+  return '#B69FFF'; // 更浅的紫色 - 低相似度
+}
 </script>
 
 <template>
@@ -1022,8 +1052,8 @@ const getChildSeriesByType = (parentId, type) => {
                       :key="`${pattern.start}-${pattern.end}`"
                       class="border rounded-lg p-4 cursor-pointer transition-all duration-200"
                       :class="{
-                        [`border-[${THEME_COLOR}] bg-[${THEME_COLOR}10]`]: selectedPattern === pattern,
-                        'border-gray-200 hover:border-[${THEME_COLOR}]': selectedPattern !== pattern
+                        'border-[#8367F8] bg-[#8367F8]/10': selectedPattern === pattern,
+                        'border-gray-200 hover:border-[#8367F8]': selectedPattern !== pattern
                       }"
                       @click="handleGenerateSelect(pattern)"
                     >
@@ -1031,7 +1061,8 @@ const getChildSeriesByType = (parentId, type) => {
                         <div class="text-sm text-gray-600">
                           <span class="mr-2">Source: {{ pattern.sourceName }}</span>
                         </div>
-                        <div class="text-sm font-semibold" :style="{ color: THEME_COLOR }">
+                        <div class="text-sm font-semibold" 
+                             :style="{ color: getSimilarityColor(pattern.similarity) }">
                           Similarity: {{ (pattern.similarity * 100).toFixed(1) }}%
                         </div>
                       </div>
