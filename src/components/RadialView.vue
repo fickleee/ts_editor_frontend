@@ -662,6 +662,9 @@ watch([
   () => datasetStore.getShowWeekday,
   () => datasetStore.getShowWeekend
 ], () => {
+  if (datasetStore.getCurrentDataset === 'capture'){
+    return
+  }
   data.value = aggregateDataForRadialView(datasetStore.getEditedData);
   updateSliderRange();
 });

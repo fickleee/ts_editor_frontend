@@ -122,14 +122,15 @@
     </div>
 
     <!-- 工作日/周末筛选 -->
-    <div class="flex items-center gap-4" v-if="datasetStore.getCurrentDataset !== 'capture'">
+    <div class="flex items-center gap-4">
       <button
         @click="datasetStore.setShowWeekday(!datasetStore.getShowWeekday)"
         :style="{
           borderColor: getWeekdayButtonColor(),
-          color: getWeekdayButtonColor()
+          color: getWeekdayButtonColor(),
         }"
         class="px-4 py-1.5 rounded-full text-base font-semibold transition-all duration-200 hover:opacity-90 border-2"
+        :disabled="datasetStore.getCurrentDataset === 'capture'"
       >
         Weekday
       </button>
@@ -137,9 +138,10 @@
         @click="datasetStore.setShowWeekend(!datasetStore.getShowWeekend)"
         :style="{
           borderColor: getWeekendButtonColor(),
-          color: getWeekendButtonColor()
+          color: getWeekendButtonColor(),
         }"
         class="px-4 py-1.5 rounded-full text-base font-semibold transition-all duration-200 hover:opacity-90 border-2"
+        :disabled="datasetStore.getCurrentDataset === 'capture'"
       >
         Weekend
       </button>

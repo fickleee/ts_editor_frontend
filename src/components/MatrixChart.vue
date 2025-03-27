@@ -1702,11 +1702,13 @@ watch(
   ],
   () => {
     // 重新创建图表以应用筛选
-    if (lineChart.value) {
-      createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
-    }
-    if (overviewChart.value) {
-      createOverviewChart(originalData.value, overviewChart.value);
+    if (datasetStore.getCurrentDataset !== 'capture') {
+      if (lineChart.value) {
+        createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
+      }
+      if (overviewChart.value) {
+        createOverviewChart(originalData.value, overviewChart.value);
+      }
     }
   }
 );
