@@ -76,14 +76,14 @@ const createOverviewChart = (data, container) => {
     .attr('class', 'detail-view')
     .style('display', 'none');
   
-  // 计算每30分钟一个box plot，一天共48个
-  const boxPlotCount = 48; // 24小时 * 2 (每小时2个30分钟)
-  const boxWidth = (containerWidth - 60) / boxPlotCount;
+  // 计算每30分钟一个box plot，一天共48个，加1是为了显示24h
+  const boxPlotCount = 49; // 24小时 * 2 (每小时2个30分钟) + 1
+  const boxWidth = (containerWidth - 50) / (boxPlotCount - 1);
   
   // 准备数据 - 按30分钟聚合
   const aggregatedData = [];
   
-  // 初始化48个时间点的数组
+  // 初始化49个时间点的数组
   for (let i = 0; i < boxPlotCount; i++) {
     aggregatedData.push([]);
   }
@@ -234,24 +234,33 @@ const createOverviewChart = (data, container) => {
   // 创建比例尺
   const xScale = d3.scaleLinear()
     .domain([0, boxPlotCount - 1])
-    .range([60, containerWidth - 20]);
+    .range([40, containerWidth - 20]);
   
   const yScale = d3.scaleLinear()
     .domain([minValue, maxValue])
     .range([containerHeight - 40, 40]);
   
+  // 计算每分钟对应的像素宽度
+  const totalMinutes = 24 * 60;
+  const pixelsPerMinute = (containerWidth - 60) / totalMinutes;  // 60 = 左右边距总和
+  
+  // 添加一个函数来计算偏移后的x坐标
+  const getOffsetX = (index) => {
+    const baseX = xScale(index);
+    const offsetMinutes = 15;
+    return baseX + (pixelsPerMinute * offsetMinutes);
+  };
+  
   // 添加X轴
   const xAxis = d3.axisBottom(xScale)
     .tickFormat(d => {
-      // 将索引转换为小时:分钟格式
       const hour = Math.floor((d * 30) / 60);
-      const minute = (d * 30) % 60;
-      return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      return `${hour.toString().padStart(2, '0')}:00`;
     })
-    .tickValues(d3.range(0, boxPlotCount, 4)); // 每2小时显示一个刻度
+    .tickValues(d3.range(0, boxPlotCount, 8)); // 每2小时显示一个刻度
   
   svg.append('g')
-    .attr('transform', `translate(0, ${containerHeight - 40})`)
+    .attr('transform', `translate(0, ${containerHeight - 40})`)  // 移除了 pixelsPerMinute * 15 的偏移
     .call(xAxis);
   
   // 添加Y轴
@@ -259,7 +268,7 @@ const createOverviewChart = (data, container) => {
     .ticks(5);
   
   svg.append('g')
-    .attr('transform', 'translate(60, 0)')
+    .attr('transform', 'translate(40, 0)')
     .call(yAxis);
   
   // 修改异常值点的处理部分
@@ -294,7 +303,7 @@ const createOverviewChart = (data, container) => {
         outliersByUserAndWeekday[key].push({
           ...dataPoint,
           timeSlot: timeSlot,
-          x: xScale(timeSlot),
+          x: getOffsetX(timeSlot),
           y: yScale(dataPoint.value)
         });
       }
@@ -314,7 +323,7 @@ const createOverviewChart = (data, container) => {
     const min = Math.max(q1 - 1.5 * iqr, d3.min(sorted.map(d => d.value)));
     const max = Math.min(q3 + 1.5 * iqr, d3.max(sorted.map(d => d.value)));
     
-    const x = xScale(i);
+    const x = getOffsetX(i);
     const boxGroup = svg.append('g')
       .attr('transform', `translate(${x}, 0)`);
     
@@ -587,7 +596,7 @@ const createOverviewChart = (data, container) => {
               
               // 创建折线图
               const detailLine = d3.line()
-                .x((d, i) => xScale(i))
+                .x((d, i) => getOffsetX(i))  // 使用 getOffsetX 来计算偏移后的位置
                 .y(d => yScale(d.value))
                 .defined(d => d !== null)
                 .curve(d3.curveMonotoneX);
@@ -612,7 +621,7 @@ const createOverviewChart = (data, container) => {
 
               points.append('circle')
                 .attr('class', 'detail-point')
-                .attr('cx', (d, i) => xScale(i))
+                .attr('cx', (d, i) => getOffsetX(i))  // 使用 getOffsetX 来计算偏移后的位置
                 .attr('cy', d => yScale(d.value))
                 .attr('r', 2)
                 .attr('fill', colorScale(dataPoint.userId));
@@ -948,7 +957,7 @@ const createLineChart = (data, container, allUserDataByWeek) => {
     .attr('height', totalHeight);
 
   // 计算所有数据的时间范围
-  const timeRange = [0, data[0].res.length - 1];
+  const timeRange = [0, data[0].res.length - 1]; // 修改为包含最后一个点
   // 计算所有用户的平均值
   const timePointCount = data[0].res.length;
   const avgValues = Array(timePointCount).fill(0);
@@ -989,7 +998,7 @@ const createLineChart = (data, container, allUserDataByWeek) => {
   // 创建全局比例尺
   const xScale = d3.scaleLinear()
     .domain(timeRange)
-    .range([60, containerWidth - 20]);
+    .range([40, containerWidth - 20]);
 
   const yScale = d3.scaleLinear()
     .domain([minValue, maxValue])
@@ -1042,7 +1051,7 @@ const createLineChart = (data, container, allUserDataByWeek) => {
     for (let i = 0; i <= yTicks; i++) {
       const yPos = yScale(minValue + (maxValue - minValue) * (i / yTicks));
       userGroup.append('line')
-        .attr('x1', 60)
+        .attr('x1', 40)
         .attr('x2', containerWidth - 20)
         .attr('y1', yPos)
         .attr('y2', yPos)
@@ -1340,25 +1349,27 @@ const createLineChart = (data, container, allUserDataByWeek) => {
 
     // 添加用户标签
     userGroup.append('text')
-      .attr('x', 10)
-      .attr('y', userStripHeight / 2)
+      .attr('x', 35)  // 调整到左边界和图表左边界(30px)的中间位置
+      .attr('y', userStripHeight / 2 + 5)
       .attr('dy', '0.35em')
       .text(`User ${user.id}`)
       .attr('font-size', MATRIX_CHART.FONTS.USER_LABEL_SIZE)
       .attr('font-weight', MATRIX_CHART.FONTS.USER_LABEL_WEIGHT)
-      .attr('fill', MATRIX_CHART.COLORS.USER_LABEL);
+      .attr('fill', MATRIX_CHART.COLORS.USER_LABEL)
+      .attr('transform', `rotate(-90, 15, ${userStripHeight / 2})`)  // 旋转中心点也相应调整
+      .attr('text-anchor', 'end');
 
-    // 添加时间刻度
-    for (let i = 0; i <= 24; i += 4) {
-      const hourIndex = Math.floor(timeRange[1] * (i / 24));
-      userGroup.append('text')
-        .attr('x', xScale(hourIndex))
-        .attr('y', userStripHeight - 5)
-        .attr('text-anchor', 'middle')
-        .text(`${i}h`)
-        .attr('font-size', MATRIX_CHART.FONTS.TIME_LABEL_SIZE)
-        .attr('fill', MATRIX_CHART.COLORS.TIME_LABEL);
-    }
+    // // 添加时间刻度
+    // for (let i = 0; i <= 24; i += 4) {  // 保持4小时的间隔
+    //   const hourIndex = Math.floor(timeRange[1] * (i / 24));
+    //   userGroup.append('text')
+    //     .attr('x', xScale(hourIndex) + 3)
+    //     .attr('y', userStripHeight - 5)
+    //     .attr('text-anchor', 'middle')
+    //     .text(`${i.toString().padStart(2, '0')}:00`)
+    //     .attr('font-size', MATRIX_CHART.FONTS.TIME_LABEL_SIZE)
+    //     .attr('fill', MATRIX_CHART.COLORS.TIME_LABEL);
+    // }
   });
 };
 
