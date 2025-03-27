@@ -94,6 +94,9 @@ const chartContainer = ref(null);
 const data = ref([]);
 const isLoading = ref(false);
 
+// 添加状态用于跟踪当前固定高亮的环索引
+const fixedHighlightRingIndex = ref(null);
+
 // 添加状态用于控制是否使用优化布局
 const useOptimizedLayout = ref(true);
 
@@ -443,40 +446,110 @@ const createConcentricDonuts = (rawData, container) => {
       .attr('data-ring-index', index)  // 添加环的索引到扇形
       .attr('data-value', (d, i) => user.res[i].value) // 添加数值属性
       .on('mouseover', function(event, d) {
-        // 更新 store 中的选中用户，触发其他视图的高亮
-        datasetStore.setSelectedUserId(user.id);
-        datasetStore.setSelectedView('radial');
         const index = d3.select(this).attr('data-index');
         const ringIndex = d3.select(this).attr('data-ring-index');
         
-        // 高亮相同时刻的扇形
-        svg.selectAll('path')
-          .filter(function() {
-            return d3.select(this).attr('data-index') === index;
-          })
-          .attr('stroke', '#FFD700')
-          .attr('stroke-width', 1)
-          .raise();
+        // 只有在没有固定高亮的环时，才应用鼠标悬停高亮效果并更新selectedUserId
+        if (fixedHighlightRingIndex.value === null) {
+          // 更新 store 中的选中用户，触发其他视图的高亮
+          datasetStore.setSelectedUserId(user.id);
+          datasetStore.setSelectedView('radial');
+          
+          // 高亮相同时刻的扇形
+          svg.selectAll('path')
+            .filter(function() {
+              return d3.select(this).attr('data-index') === index;
+            })
+            .attr('stroke', '#FFD700')
+            .attr('stroke-width', 1)
+            .raise();
 
-        // 高亮整个圆环
-        svg.selectAll('path')
-          .filter(function() {
-            return d3.select(this).attr('data-ring-index') === ringIndex;
-          })
-          .attr('stroke', '#FFD700')
-          .attr('stroke-width', 1)
-          .raise();
-
-
+          // 高亮整个圆环
+          svg.selectAll('path')
+            .filter(function() {
+              return d3.select(this).attr('data-ring-index') === ringIndex;
+            })
+            .attr('stroke', '#FFD700')
+            .attr('stroke-width', 1)
+            .raise();
+        }
       })
       .on('mouseout', function(event, d) {
-        // 移除所有高亮效果
-        svg.selectAll('path')
-          .attr('stroke', 'none');
-        datasetStore.setSelectedUserId(null);
-        datasetStore.setSelectedView(null);
+        // 如果有固定高亮的环，不清除高亮效果
+        if (fixedHighlightRingIndex.value === null) {
+          // 移除所有高亮效果
+          svg.selectAll('path')
+            .attr('stroke', 'none');
+          datasetStore.setSelectedUserId(null);
+          datasetStore.setSelectedView(null);
+        } else {
+          // 恢复固定高亮环的高亮效果
+          svg.selectAll('path')
+            .filter(function() {
+              return d3.select(this).attr('data-ring-index') === fixedHighlightRingIndex.value;
+            })
+            .attr('stroke', '#FFD700')
+            .attr('stroke-width', 1)
+            .raise();
+        }
+      })
+      .on('click', function(event, d) {
+        // 获取当前点击的环索引
+        const ringIndex = d3.select(this).attr('data-ring-index');
+        const userId = processedData[ringIndex].id; // 获取对应的用户ID
+        
+        // 如果点击的是当前已固定高亮的环，则取消固定高亮
+        if (fixedHighlightRingIndex.value === ringIndex) {
+          fixedHighlightRingIndex.value = null;
+          // 清除所有高亮
+          svg.selectAll('path').attr('stroke', 'none');
+          // 重置选中用户
+          datasetStore.setSelectedUserId(null);
+          datasetStore.setSelectedView(null);
+        } else {
+          // 清除之前的高亮
+          svg.selectAll('path').attr('stroke', 'none');
+          
+          // 设置新的固定高亮环
+          fixedHighlightRingIndex.value = ringIndex;
+          
+          // 更新选中的用户ID
+          datasetStore.setSelectedUserId(userId);
+          datasetStore.setSelectedView('radial');
+          
+          // 高亮整个圆环
+          svg.selectAll('path')
+            .filter(function() {
+              return d3.select(this).attr('data-ring-index') === ringIndex;
+            })
+            .attr('stroke', '#FFD700')
+            .attr('stroke-width', 1)
+            .raise();
+        }
+        
+        // 阻止事件冒泡
+        event.stopPropagation();
       });
   });
+
+  // 添加背景点击事件，用于取消固定高亮
+  svg.append('rect')
+    .attr('width', width * 2)
+    .attr('height', height * 2)
+    .attr('x', -width)
+    .attr('y', -height)
+    .attr('fill', 'transparent')
+    .style('pointer-events', 'all')
+    .lower() // 将背景置于最底层
+    .on('click', function() {
+      // 取消固定高亮
+      fixedHighlightRingIndex.value = null;
+      // 清除所有高亮
+      svg.selectAll('path').attr('stroke', 'none');
+      // 重置选中用户
+      datasetStore.setSelectedUserId(null);
+      datasetStore.setSelectedView(null);
+    });
 
   // 添加鼠标事件的CSS
   svg.style('pointer-events', 'all');
