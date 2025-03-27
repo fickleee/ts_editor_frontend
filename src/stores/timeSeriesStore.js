@@ -40,22 +40,54 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   }
 
   const addSeries = (newSeries) => {
-    const existingSeries = series.value.find(s => s.id === newSeries.id);
-    if (!existingSeries) {
+    // 构建更严格的唯一性检查条件
+    const existingSeries = series.value.find(s => {
+      // 完全匹配检查：ID、日期和变量
+      const idMatch = s.id === newSeries.id;
+      const dateMatch = s.date === newSeries.date;
+      const variableMatch = s.variable === newSeries.variable;
+      
+      // 旧数据可能没有日期和变量 - 只检查ID
+      if (!newSeries.date && !newSeries.variable) {
+        return idMatch;
+      }
+      
+      // 新数据需要完全匹配
+      return idMatch && dateMatch && variableMatch;
+    });
+    
+    if (existingSeries) {
+      // 如果找到现有序列，检查是否需要更新其信息
+      // 确保现有序列包含所有最新属性
+      if (newSeries.date && !existingSeries.date) {
+        existingSeries.date = newSeries.date;
+      }
+      
+      if (newSeries.variable && !existingSeries.variable) {
+        existingSeries.variable = newSeries.variable;
+      }
+      
+      // 更新其他数据
+      Object.assign(existingSeries, {
+        data: newSeries.data,
+        visible: newSeries.visible,
+        type: newSeries.type || existingSeries.type
+      });
+    } else {
+      // 如果没有匹配的序列，添加新序列
       series.value.push(newSeries);
       
-      // 确保子序列始终保持正确的排序顺序
+      // 保持子序列的排序
       const typeOrder = { 'lf': 1, 'mf': 2, 'hf': 3 };
       series.value.sort((a, b) => {
         if (a.parentId && b.parentId && a.parentId === b.parentId) {
           return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
         }
-        return 0; // 如果不是同一个父级的子序列，保持原有顺序
+        return 0;
       });
-    } else {
-      Object.assign(existingSeries, newSeries);
     }
-    saveState()
+    
+    saveState();
   }
 
   const saveState = () => {
@@ -162,11 +194,10 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         newParentData.forEach((point, i) => {
           if (point) {
             point.value = 0;
+            
             childSeries.forEach(child => {
               const childData = child.id === seriesId ? newData : child.data;
-              if (childData[i] && childData[i].time === point.time) {
-                point.value += childData[i].value;
-              }
+              point.value += findClosestPointValue(childData, point.time);
             });
           }
         })
@@ -209,6 +240,26 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     
     const afterData = getSeriesSnapshot([seriesId])
     recordOperation(operationType, seriesId, { offset }, beforeData, afterData);
+
+    // 如果是子序列被移动，也更新父序列的选择范围
+    if (currentSeries.parentId) {
+      setSelection(
+        {
+          start: selectedTimeRange.value.start,
+          end: selectedTimeRange.value.end
+        }, 
+        [currentSeries.id, currentSeries.parentId]
+      );
+    }
+
+    // 确保任何操作后都更新父序列
+    if (currentSeries.parentId) {
+      // 如果原函数中已有父序列更新逻辑，确保它们正确执行
+      // 如果没有，则手动调用更新函数
+      if (!currentSeries.parentId.includes('_decomp_')) { // 避免重复更新分解序列
+        updateParentSeriesFromChild(seriesId, series.value[seriesIndex].data);
+      }
+    }
   }
 
   const applyCurve = (seriesId, curve) => {
@@ -219,7 +270,8 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
 
     const beforeData = getSeriesSnapshot([seriesId])
 
-    const newData = JSON.parse(JSON.stringify(series.value[seriesIndex].data))
+    const currentSeries = series.value[seriesIndex]
+    const newData = JSON.parse(JSON.stringify(currentSeries.data))
     const { start, end } = selectedTimeRange.value
     const duration = end - start
 
@@ -237,14 +289,63 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     })
 
     series.value[seriesIndex] = {
-      ...series.value[seriesIndex],
+      ...currentSeries,
       data: newData
     }
 
-    series.value[seriesIndex].data = ensureDataPoints(series.value[seriesIndex].data);
+    // 如果是子序列，更新父序列
+    if (currentSeries.parentId) {
+      const parentIndex = series.value.findIndex(s => s.id === currentSeries.parentId)
+      if (parentIndex !== -1) {
+        const childSeries = series.value.filter(s => s.parentId === currentSeries.parentId)
+        
+        const newParentData = JSON.parse(JSON.stringify(series.value[parentIndex].data))
+        
+        // 重新计算父序列的值
+        newParentData.forEach((point, i) => {
+          if (point) {
+            point.value = 0
+            childSeries.forEach(child => {
+              const childData = child.id === seriesId ? newData : child.data
+              point.value += findClosestPointValue(childData, point.time)
+            })
+          }
+        })
+        
+        series.value[parentIndex] = {
+          ...series.value[parentIndex],
+          data: newParentData
+        }
+
+        // 确保父序列数据点完整
+        series.value[parentIndex].data = ensureDataPoints(series.value[parentIndex].data)
+      }
+    }
+
+    series.value[seriesIndex].data = ensureDataPoints(series.value[seriesIndex].data)
     
     const afterData = getSeriesSnapshot([seriesId])
-    recordOperation('curve', seriesId, { curve }, beforeData, afterData);
+    recordOperation('curve', seriesId, { curve }, beforeData, afterData)
+    
+    // 如果是子序列被修改，也更新选择范围包括父序列
+    if (currentSeries.parentId) {
+      setSelection(
+        {
+          start: selectedTimeRange.value.start,
+          end: selectedTimeRange.value.end
+        }, 
+        [currentSeries.id, currentSeries.parentId]
+      )
+    }
+
+    // 确保任何操作后都更新父序列
+    if (currentSeries.parentId) {
+      // 如果原函数中已有父序列更新逻辑，确保它们正确执行
+      // 如果没有，则手动调用更新函数
+      if (!currentSeries.parentId.includes('_decomp_')) { // 避免重复更新分解序列
+        updateParentSeriesFromChild(seriesId, series.value[seriesIndex].data);
+      }
+    }
   }
 
   const interpolateCurveAtPosition = (curve, position) => {
@@ -656,138 +757,78 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   }
 
   const replaceWithPattern = (pattern, seriesId) => {
-    if (!selectedTimeRange.value || !seriesId) return
-
-    const beforeData = getSeriesSnapshot([seriesId])
-
-    const { start, end } = selectedTimeRange.value
-    const duration = end - start
-
+    if (!pattern || !seriesId || !selectedTimeRange.value) return
+    
     const seriesIndex = series.value.findIndex(s => s.id === seriesId)
     if (seriesIndex === -1) return
-
-    const newData = JSON.parse(JSON.stringify(series.value[seriesIndex].data))
     
-    const leftValue = interpolateValue(newData, start)
-    const rightValue = interpolateValue(newData, end)
+    const currentSeries = series.value[seriesIndex]
+    const beforeData = getSeriesSnapshot([seriesId])
     
-    const patternData = pattern.data.filter(p => 
-      p && p.time !== null && p.time !== undefined && 
-      p.value !== null && p.value !== undefined && 
-      !isNaN(p.time) && !isNaN(p.value)
-    )
+    const { start, end } = selectedTimeRange.value
+    const duration = end - start
     
-    if (patternData.length < 2) return
-    
-    // Remove existing points in the selection range
-    for (let i = newData.length - 1; i >= 0; i--) {
-      const point = newData[i]
-      if (point && !isNaN(point.time) && point.time >= start && point.time <= end) {
-        newData.splice(i, 1)
-      }
-    }
-    
-    // Add new points from the pattern, with appropriate time mapping
-    const replacementPoints = [];
-    patternData.forEach(point => {
+    // 将模式数据缩放到当前选定范围
+    const scaledData = pattern.data.map(point => {
       const normalizedTime = (point.time - pattern.start) / (pattern.end - pattern.start)
       const newTime = start + normalizedTime * duration
-      
-      let adjustedValue = point.value
-      
-      // Smooth transition at boundaries (first and last 10% of the range)
-      if (normalizedTime < 0.1) {
-        const blendFactor = normalizedTime / 0.1
-        adjustedValue = leftValue * (1 - blendFactor) + point.value * blendFactor
-      } else if (normalizedTime > 0.9) {
-        const blendFactor = (normalizedTime - 0.9) / 0.1
-        adjustedValue = point.value * (1 - blendFactor) + rightValue * blendFactor
-      }
-      
-      replacementPoints.push({
+      return {
         time: newTime,
-        value: adjustedValue
-      })
-    })
-    
-    // 线性插值确保每分钟都有数据点
-    const interpolatedPoints = ensureMinuteGranularity(replacementPoints, start, end);
-    
-    // 在添加到newData前确保没有时间相近的点
-    // 优先保留来自插值的点，因为它们是按分钟对齐的
-    interpolatedPoints.forEach(point => {
-      // 检查是否已经存在时间非常接近的点
-      const existingPointIndex = newData.findIndex(p => 
-        Math.abs(p.time - point.time) < 0.001 // 约3.6秒的阈值
-      );
-      
-      if (existingPointIndex === -1) {
-        // 如果不存在相近的点，直接添加
-        newData.push(point);
-      } else {
-        // 如果存在相近的点，替换它
-        // 注意：我们更新时间以确保对齐到整分钟
-        newData[existingPointIndex].time = point.time;
-        newData[existingPointIndex].value = point.value;
+        value: point.value
       }
-    });
+    }).sort((a, b) => a.time - b.time)
     
-    // Sort data points by time
-    newData.sort((a, b) => a.time - b.time);
+    // 克隆当前序列数据并替换选中范围内的值
+    const newData = JSON.parse(JSON.stringify(currentSeries.data))
     
-    // Add transition zones beyond the selection range
-    const transitionRange = 0.5
-    const startTransition = Math.max(0, start - transitionRange)
-    const endTransition = Math.min(24, end + transitionRange)
+    // 移除选中范围内的所有点
+    const filteredData = newData.filter(point => 
+      point.time < start || point.time > end
+    )
     
-    // Apply easing to transition zones
-    for (let i = 0; i < newData.length; i++) {
-      const point = newData[i]
-      if (!point || isNaN(point.time) || isNaN(point.value)) continue
-      
-      // Pre-selection transition
-      if (point.time >= startTransition && point.time < start) {
-        const progress = (point.time - startTransition) / transitionRange
-        const easeProgress = d3.easeCubicInOut(progress)
-        
-        const originalValue = point.value
-        const nextPoint = newData.find(p => p && !isNaN(p.time) && !isNaN(p.value) && p.time >= start)
-        if (nextPoint) {
-          newData[i].value = originalValue * (1 - easeProgress) + nextPoint.value * easeProgress
-        }
-      } 
-      // Post-selection transition
-      else if (point.time > end && point.time <= endTransition) {
-        const progress = (point.time - end) / transitionRange
-        const easeProgress = d3.easeCubicInOut(progress)
-        
-        const originalValue = point.value
-        const prevPoints = newData.filter(p => p && !isNaN(p.time) && !isNaN(p.value) && p.time <= end)
-        const prevPoint = prevPoints.length > 0 ? prevPoints[prevPoints.length - 1] : null
-        
-        if (prevPoint) {
-          newData[i].value = prevPoint.value * (1 - easeProgress) + originalValue * easeProgress
-        }
-      }
-    }
+    // 合并保留的点和新模式点
+    const mergedData = [...filteredData, ...scaledData].sort((a, b) => a.time - b.time)
     
-    // Update the series with new data
+    // 更新序列
     series.value[seriesIndex] = {
-      ...series.value[seriesIndex],
-      data: newData
+      ...currentSeries,
+      data: mergedData
     }
     
-    // Record the operation for undo/redo
+    // 如果是子序列，更新父序列
+    if (currentSeries.parentId) {
+      updateParentSeriesFromChild(seriesId, mergedData)
+    }
+    
+    // 确保数据点完整
+    series.value[seriesIndex].data = ensureDataPoints(series.value[seriesIndex].data)
+    
     const afterData = getSeriesSnapshot([seriesId])
     recordOperation('replace', seriesId, { 
-      pattern: {
-        seriesId: pattern.seriesId,
-        start: pattern.start,
-        end: pattern.end,
-        userId: pattern.userId,
-        date: pattern.date
-      }
+      patternId: pattern.seriesId,
+      patternSource: pattern.sourceType,
+      timeRange: { start, end }
     }, beforeData, afterData)
+    
+    // 如果是子序列被修改，也更新选择范围包括父序列
+    if (currentSeries.parentId) {
+      setSelection(
+        {
+          start: selectedTimeRange.value.start,
+          end: selectedTimeRange.value.end
+        }, 
+        [currentSeries.id, currentSeries.parentId]
+      )
+    }
+
+    // 确保任何操作后都更新父序列
+    if (currentSeries.parentId) {
+      // 如果原函数中已有父序列更新逻辑，确保它们正确执行
+      // 如果没有，则手动调用更新函数
+      if (!currentSeries.parentId.includes('_decomp_')) { // 避免重复更新分解序列
+        updateParentSeriesFromChild(seriesId, series.value[seriesIndex].data);
+      }
+    }
   }
 
   // 添加这个新函数来确保每分钟都有数据点
@@ -861,56 +902,58 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     return result;
   }
 
-  const cloneSeries = (seriesId, sourceTimeRange, targetTimeRange) => {
-    if (!selectedTimeRange.value) return;
-    
-    const seriesIndex = series.value.findIndex(s => s.id === seriesId);
-    if (seriesIndex === -1) return;
-    
-    const beforeData = getSeriesSnapshot([seriesId]);
+  const cloneSeries = (seriesId, sourceRange, targetRange) => {
+    const seriesIndex = series.value.findIndex(s => s.id === seriesId)
+    if (seriesIndex === -1) return
 
-    const { start, end } = selectedTimeRange.value;
-    const sourceData = series.value[seriesIndex].data.filter(
-      point => point && !isNaN(point.time) && !isNaN(point.value) &&
-              point.time >= start && point.time <= end
-    );
+    const beforeData = getSeriesSnapshot([seriesId])
     
-    if (sourceData.length === 0) return;
+    const currentSeries = series.value[seriesIndex]
+    let newData = JSON.parse(JSON.stringify(currentSeries.data))
+
+    // 计算范围
+    const sourceDuration = sourceRange.end - sourceRange.start
+    const targetDuration = targetRange.end - targetRange.start
     
-    const duration = end - start;
-    const targetStart = targetTimeRange.start;
-    const targetEnd = targetTimeRange.end;
-    
-    const newData = [...series.value[seriesIndex].data];
-    
-    for (let i = newData.length - 1; i >= 0; i--) {
-      const point = newData[i];
-      if (point && !isNaN(point.time) && point.time >= targetStart && point.time <= targetEnd) {
-        newData.splice(i, 1);
+    // 找到源范围内的点
+    const sourcePoints = currentSeries.data.filter(
+      p => p && p.time >= sourceRange.start && p.time <= sourceRange.end
+    ).sort((a, b) => a.time - b.time)
+
+    // 对于目标范围内的每个点进行移除
+    newData = newData.filter(
+      p => p && !(p.time >= targetRange.start && p.time <= targetRange.end)
+    )
+
+    // 克隆并缩放点到目标范围
+    const clonedPoints = sourcePoints.map(point => {
+      const relativePosition = (point.time - sourceRange.start) / sourceDuration
+      return {
+        time: targetRange.start + relativePosition * targetDuration,
+        value: point.value
       }
-    }
-    
-    sourceData.forEach(point => {
-      const newPoint = {
-        time: parseFloat((point.time - start + targetStart).toFixed(2)),
-        value: parseFloat(point.value.toFixed(8))
-      };
-      newData.push(newPoint);
-    });
-    
-    newData.sort((a, b) => a.time - b.time);
-    const finalData = ensureDataPoints(newData);
-    
+    })
+
+    // 合并数据
+    newData = [...newData, ...clonedPoints].sort((a, b) => a.time - b.time)
+
     series.value[seriesIndex] = {
-      ...series.value[seriesIndex],
-      data: finalData
-    };
-    
-    const afterData = getSeriesSnapshot([seriesId]);
+      ...currentSeries,
+      data: newData
+    }
+
+    // 如果是子序列，立即更新父序列
+    if (currentSeries.parentId) {
+      updateParentSeriesFromChild(seriesId, newData)
+    }
+
+    series.value[seriesIndex].data = ensureDataPoints(series.value[seriesIndex].data)
+
+    const afterData = getSeriesSnapshot([seriesId])
     recordOperation('clone', seriesId, {
-      sourceTimeRange,
-      targetTimeRange
-    }, beforeData, afterData);
+      sourceRange,
+      targetRange
+    }, beforeData, afterData)
   }
 
   const importData = (importedSeries) => {
@@ -982,14 +1025,34 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   const canRedo = computed(() => operationIndex.value < operations.value.length - 1);
 
   const deleteSeries = (seriesId) => {
-    const index = series.value.findIndex(s => s.id === seriesId)
-    if (index !== -1) {
-      if (selectedSeries.value.includes(seriesId)) {
-        selectedSeries.value = selectedSeries.value.filter(id => id !== seriesId)
-      }
+    const seriesIndex = series.value.findIndex(s => s.id === seriesId)
+    if (seriesIndex === -1) return
+
+    const currentSeries = series.value[seriesIndex]
+    const beforeData = getSeriesSnapshot([seriesId])
+
+    // 记录操作
+    recordOperation('delete', seriesId, {}, beforeData, null)
+
+    // 如果是子序列，需要先从父序列中移除它的贡献
+    if (currentSeries.parentId) {
+      // 创建一个值全为0的临时数据集
+      const zeroData = JSON.parse(JSON.stringify(currentSeries.data))
+      zeroData.forEach(point => {
+        if (point) point.value = 0
+      })
       
-      series.value.splice(index, 1)
-      saveState()
+      // 更新父序列，移除此子序列的贡献
+      updateParentSeriesFromChild(seriesId, zeroData)
+    }
+
+    // 移除序列
+    series.value.splice(seriesIndex, 1)
+    
+    // 如果此序列是父序列，也删除所有子序列
+    const childSeries = series.value.filter(s => s.parentId === seriesId)
+    for (const child of childSeries) {
+      deleteSeries(child.id)
     }
   }
 
@@ -1169,11 +1232,10 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         newParentData.forEach((point, i) => {
           if (point) {
             point.value = 0;
+            
             childSeries.forEach(child => {
               const childData = child.id === seriesId ? newData : child.data;
-              if (childData[i] && childData[i].time === point.time) {
-                point.value += childData[i].value;
-              }
+              point.value += findClosestPointValue(childData, point.time);
             });
           }
         });
@@ -1213,6 +1275,15 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     }
 
     series.value[seriesIndex].data = ensureDataPoints(series.value[seriesIndex].data);
+
+    // 确保任何操作后都更新父序列
+    if (currentSeries.parentId) {
+      // 如果原函数中已有父序列更新逻辑，确保它们正确执行
+      // 如果没有，则手动调用更新函数
+      if (!currentSeries.parentId.includes('_decomp_')) { // 避免重复更新分解序列
+        updateParentSeriesFromChild(seriesId, series.value[seriesIndex].data);
+      }
+    }
   }
 
   const recordBatchOperation = (type, affectedSeriesIds, params = {}, beforeData = null, afterData = null) => {
@@ -1311,6 +1382,119 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     }
     return '';
   };
+
+  // 添加一个辅助函数进行更精确的插值
+  const findClosestPointValue = (data, targetTime, threshold = 0.01) => {
+    // 如果没有数据，返回0
+    if (!data || data.length === 0) return 0;
+    
+    // 查找最接近的点
+    let closestPoint = null;
+    let minDiff = threshold;
+    
+    for (const point of data) {
+      if (!point) continue;
+      const diff = Math.abs(point.time - targetTime);
+      if (diff < minDiff) {
+        closestPoint = point;
+        minDiff = diff;
+      }
+    }
+    
+    // 如果找到足够接近的点，返回其值
+    if (closestPoint) return closestPoint.value;
+    
+    // 如果没有足够接近的点，尝试线性插值
+    let before = null;
+    let after = null;
+    
+    // 找出目标时间前后的点
+    for (const point of data) {
+      if (!point) continue;
+      
+      if (point.time <= targetTime && (!before || point.time > before.time)) {
+        before = point;
+      }
+      
+      if (point.time >= targetTime && (!after || point.time < after.time)) {
+        after = point;
+      }
+    }
+    
+    // 如果能找到前后点，进行线性插值
+    if (before && after) {
+      const timeDiff = after.time - before.time;
+      if (timeDiff > 0) {
+        const ratio = (targetTime - before.time) / timeDiff;
+        return before.value + (after.value - before.value) * ratio;
+      }
+    }
+    
+    // 退化情况：仅有一侧点
+    if (before) return before.value;
+    if (after) return after.value;
+    
+    // 如果完全没有相关点，返回0
+    return 0;
+  };
+
+  // 记录上次更新时间
+  let lastParentUpdateTime = Date.now()
+  const updateParentSeriesFromChild = (childSeriesId, childData) => {
+    const now = Date.now()
+    // 确保至少25ms间隔，避免过于频繁更新导致性能问题
+    if (now - lastParentUpdateTime < 25) {
+      setTimeout(() => {
+        updateParentSeriesFromChild(childSeriesId, childData)
+      }, 25)
+      return
+    }
+    
+    lastParentUpdateTime = now
+    
+    const childSeries = series.value.find(s => s.id === childSeriesId)
+    if (!childSeries || !childSeries.parentId) return
+    
+    const parentIndex = series.value.findIndex(s => s.id === childSeries.parentId)
+    if (parentIndex === -1) return
+    
+    // 获取所有相关子序列
+    const allChildSeries = series.value.filter(s => s.parentId === childSeries.parentId)
+    
+    // 准备新的父序列数据
+    const newParentData = JSON.parse(JSON.stringify(series.value[parentIndex].data))
+    
+    // 重新计算父序列的值
+    newParentData.forEach((point) => {
+      if (point) {
+        point.value = 0
+        allChildSeries.forEach(child => {
+          // 使用传入的新数据或现有数据
+          const dataToUse = child.id === childSeriesId ? childData : child.data
+          point.value += findClosestPointValue(dataToUse, point.time)
+        })
+      }
+    })
+    
+    // 更新父序列
+    series.value[parentIndex] = {
+      ...series.value[parentIndex],
+      data: ensureDataPoints(newParentData)
+    }
+    
+    // 更新选择范围包括父序列（如果有选择）
+    if (selectedTimeRange.value) {
+      setSelection(
+        {
+          start: selectedTimeRange.value.start,
+          end: selectedTimeRange.value.end
+        }, 
+        [...selectedSeries.value, childSeries.parentId].filter((v, i, a) => a.indexOf(v) === i) // 确保无重复
+      )
+    }
+    
+    return series.value[parentIndex]
+  }
 
   return {
     series,

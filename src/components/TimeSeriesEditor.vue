@@ -378,18 +378,18 @@ const handleChartDrag = (timeRange, valueRange, dragPoint) => {
         }
         
         if (selectedSeriesId.value) {
-          store.moveSeriesWithoutRecord(selectedSeriesId.value, { x: offset * 0.0005, y: 0 })
+          store.moveSeriesWithoutRecord(selectedSeriesId.value, { x: offset * 0.005, y: 0 })
           store.setSelection({
-            start: store.selectedTimeRange.start + offset * 0.0005,
-            end: store.selectedTimeRange.end + offset * 0.0005
+            start: store.selectedTimeRange.start + offset * 0.005,
+            end: store.selectedTimeRange.end + offset * 0.005
           }, [selectedSeriesId.value])
         } else {
           store.selectedSeries.forEach(id => {
-            store.moveSeriesWithoutRecord(id, { x: offset * 0.0005, y: 0 })
+            store.moveSeriesWithoutRecord(id, { x: offset * 0.005, y: 0 })
           })
           store.setSelection({
-            start: store.selectedTimeRange.start + offset * 0.0005,
-            end: store.selectedTimeRange.end + offset * 0.0005
+            start: store.selectedTimeRange.start + offset * 0.005,
+            end: store.selectedTimeRange.end + offset * 0.005
           }, store.selectedSeries)
         }
       }
@@ -738,20 +738,127 @@ const initializeDefaultData = () => {
   }
 };
 
+// 添加清理函数
+const cleanupDuplicateSeries = () => {
+  // 将序列按ID分组
+  const seriesGroups = {};
+  
+  store.series.forEach(s => {
+    if (!seriesGroups[s.id]) {
+      seriesGroups[s.id] = [];
+    }
+    seriesGroups[s.id].push(s);
+  });
+  
+  // 对每个ID组检查重复
+  Object.values(seriesGroups).forEach(group => {
+    if (group.length <= 1) return; // 没有重复
+    
+    // 保留最完整的序列（有日期和变量的）
+    let bestSeries = group[0];
+    for (let i = 1; i < group.length; i++) {
+      const current = group[i];
+      // 有日期和变量的序列优先级最高
+      if ((current.date && !bestSeries.date) || 
+          (current.variable && !bestSeries.variable)) {
+        // 删除旧的不完整序列
+        const index = store.series.findIndex(s => s === bestSeries);
+        if (index !== -1) {
+          store.series.splice(index, 1);
+        }
+        bestSeries = current;
+      } else if (bestSeries.date && bestSeries.variable) {
+        // 如果最佳序列已经有日期和变量，删除其他重复序列
+        const index = store.series.findIndex(s => s === current);
+        if (index !== -1) {
+          store.series.splice(index, 1);
+        }
+      }
+    }
+  });
+};
+
 onMounted(() => {
   // 确保初始化时清空所有数据
   store.series.splice(0, store.series.length);
   
-  // 合并重复的事件监听
+  // 监听添加时间序列的事件
   window.addEventListener('add-time-series', (event) => {
-    console.log('TimeSeriesEditor 接收到的数据:', event.detail);
-    handleAddTimeSeries(event);
+    const data = event.detail;
+    if (!data || !data.length) return;
+    
+    // 获取当前数据集类型
+    const datasetStore = useDatasetStore();
+    const currentDataset = datasetStore.getCurrentDataset;
+    
+    data.forEach(item => {
+      const { id, date, variable, data: seriesData } = item;
+      
+      // 构建唯一的序列ID，仅在capture数据集时添加变量信息
+      let seriesId;
+      if (currentDataset === 'capture' && variable) {
+        seriesId = `user_${id}_${variable}`;
+      } else {
+        seriesId = `user_${id}`;
+      }
+      
+      // 查找现有序列，根据不同的数据集使用不同的匹配条件
+      let existingSeries;
+      if (currentDataset === 'capture' && variable) {
+        existingSeries = store.series.find(s => 
+          s.id === seriesId && 
+          s.date === date && 
+          s.variable === variable
+        );
+      } else {
+        existingSeries = store.series.find(s => 
+          s.id === seriesId && 
+          s.date === date
+        );
+      }
+      
+      if (existingSeries) {
+        console.log(`序列已存在，不重复添加: ${seriesId}`);
+        return;
+      }
+      
+      // 转换为小时格式
+      const processedData = seriesData.map(point => {
+        const [hours, minutes] = point.time.split(':').map(Number);
+        return {
+          time: hours + minutes / 60,
+          value: point.value
+        };
+      });
+      
+      // 创建序列对象，仅在capture数据集时添加variable属性
+      const newSeries = {
+        id: seriesId,
+        date,
+        data: processedData,
+        visible: true,
+        type: 'original'
+      };
+      
+      // 只在capture数据集时添加variable属性
+      if (currentDataset === 'capture' && variable) {
+        newSeries.variable = variable;
+      }
+      
+      // 添加到store
+      store.addSeries(newSeries);
+    });
   });
+  
+  // 添加延迟的清理操作，确保在初始化后执行
+  setTimeout(() => {
+    cleanupDuplicateSeries();
+  }, 500);
 })
 
 onUnmounted(() => {
   // 移除事件监听 (也只需要一处)
-  window.removeEventListener('add-time-series', handleAddTimeSeries);
+  window.removeEventListener('add-time-series', () => {});
 })
 
 // Modify the handleAddTimeSeries function to ensure the series appears in the view

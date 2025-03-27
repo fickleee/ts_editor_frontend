@@ -323,128 +323,107 @@ const getOriginSeriesData = () => {
   return timeSeriesStore.series.filter(s => s.type === 'original');
 };
 
-// 同步按钮点击处理函数
-const handleSyncClick = () => {
-  // 立即设置更新中状态为true并触发loading状态
+// 修改 handleSyncClick 函数，添加变量信息
+const handleSyncClick = async () => {
+  if (isUpdating.value) return;
   isUpdating.value = true;
   
-  // 立即发送loading事件，而不是等待updateEditedDataFromTrans
-  window.dispatchEvent(new CustomEvent('matrix-loading-changed', {
-    detail: { loading: true }
-  }));
-  
-  // 使用setTimeout让UI有机会先渲染loading状态，再执行数据处理
-  setTimeout(() => {
-    try {
-      // 获取所有 origin 曲线
-      const originSeries = getOriginSeriesData();
+  try {
+    // 开始加载状态
+    window.dispatchEvent(new CustomEvent('matrix-loading-changed', {
+      detail: { loading: true }
+    }));
+
+    // 从时间序列存储获取所有数据
+    const allSeries = timeSeriesStore.series;
+    
+    if (!allSeries || allSeries.length === 0) {
+      ElMessage.warning('No data to sync');
+      isUpdating.value = false;
+      return;
+    }
+
+    // 按用户和日期分组数据
+    const groupedData = {};
+    
+    // 遍历所有序列
+    allSeries.forEach(series => {
+      // 跳过隐藏的系列和子系列
+      if (!series.visible || series.parentId) return;
       
-      if (!originSeries.length) {
-        console.warn('没有找到 origin 类型的时间序列数据');
-        isUpdating.value = false;
-        
-        // 关闭loading状态
-        window.dispatchEvent(new CustomEvent('matrix-loading-changed', {
-          detail: { loading: false }
-        }));
+      // 提取用户ID
+      const match = series.id.match(/user[_]?(\d+)/);
+      if (!match) return;
+      
+      const userId = parseInt(match[1]);
+      if (isNaN(userId)) return;
+      
+      // 确定日期
+      let date = series.date || '';
+      if (!date && datasetStore.getCurrentDataset !== 'capture') {
+        // 对于非capture数据集，如果没有日期则跳过
         return;
       }
       
-      // 转换数据格式为 transData 格式
-      const transData = originSeries.map(series => {
-        // 从ID中提取日期和用户ID
-        let dateStr = '';
-        let userId = series.id; // 默认保持原始ID
+      // 提取变量信息
+      let variable = null;
+      if (datasetStore.getCurrentDataset === 'capture') {
+        // 如果是capture数据集，直接使用序列的variable属性
+        variable = series.variable || 'x'; // 默认为x
+      }
+      
+      // 创建用户+日期+变量的唯一键
+      const key = `${userId}_${date}_${variable || ''}`;
+      if (!groupedData[key]) {
+        groupedData[key] = {
+          id: userId,
+          date: date,
+          data: []
+        };
         
-        // 检查ID是否符合 user_XX_YYYY-MM-DD 格式
-        const idMatch = series.id.match(/^(user_(\d+))_(\d{4}-\d{2}-\d{2})$/);
-        if (idMatch) {
-          userId = parseInt(idMatch[2], 10); // 提取数字部分并转换为数字类型
-          dateStr = idMatch[3]; // 提取YYYY-MM-DD部分
-        } else if (series.data && series.data.length > 0) {
-          // 如果ID不符合特定格式，尝试从数据中提取日期
-          const firstTimeStr = series.data[0].time;
-          if (typeof firstTimeStr === 'string' && firstTimeStr.includes(' ')) {
-            dateStr = firstTimeStr.split(' ')[0];
-          } else if (typeof firstTimeStr === 'string' && firstTimeStr.includes('-')) {
-            dateStr = firstTimeStr;
-          } else {
-            // 使用当前日期作为默认值
-            const now = new Date();
-            dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-          }
-          
-          // 尝试从ID中提取纯数字部分（如果ID是user_XX格式）
-          const userIdMatch = series.id.match(/^user_(\d+)$/);
-          if (userIdMatch) {
-            userId = parseInt(userIdMatch[1], 10); // 提取数字部分并转换为数字类型
-          }
+        // 只有capture数据集才添加变量属性
+        if (datasetStore.getCurrentDataset === 'capture' && variable) {
+          groupedData[key].variable = variable;
+        }
+      }
+      
+      // 处理数据点，确保有正确的格式
+      series.data.forEach(point => {
+        // 确保时间格式为 HH:MM
+        let timeStr;
+        if (typeof point.time === 'number') {
+          const hours = Math.floor(point.time);
+          const minutes = Math.round((point.time - hours) * 60);
+          timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        } else {
+          timeStr = point.time;
         }
         
-        // 转换数据点格式
-        const formattedPoints = series.data.map(point => {
-          // 处理不同格式的时间
-          let timeStr = '';
-          if (typeof point.time === 'string') {
-            // 如果时间是字符串格式
-            if (point.time.includes(' ')) {
-              // 如果包含空格，则是完整日期时间
-              timeStr = point.time;
-            } else if (!isNaN(point.time)) {
-              // 如果是数字格式（小时），转换为时间字符串
-              const hours = Math.floor(point.time);
-              const minutes = Math.round((point.time - hours) * 60);
-              timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
-            } else {
-              // 已经是时间格式
-              timeStr = point.time;
-            }
-          } else if (typeof point.time === 'number') {
-            // 如果时间是数字（小时），转换为时间字符串
-            const hours = Math.floor(point.time);
-            const minutes = Math.round((point.time - hours) * 60);
-            timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
-          }
-          
-          return {
-            time: timeStr,
-            value: point.value
-          };
+        // 添加到分组数据中
+        groupedData[key].data.push({
+          time: timeStr,
+          value: point.value
         });
-        
-        return {
-          id: userId, // 现在userId是数字类型
-          date: dateStr,
-          data: formattedPoints
-        };
       });
-      // 更新到 store 以传递给左侧组件
-      timeSeriesStore.updateEditedSeriesData(transData);
-      // 设置传输数据并更新编辑后的数据
-      datasetStore.setTransData(transData);
-      datasetStore.updateEditedDataFromTrans();
-      console.log(transData);
-      
-      // // 判断editedData是否和originalData相等（深度比较）
-      // const originalData = datasetStore.getOriginalData;
-      // const editedData = datasetStore.getEditedData;
-      // const isDataEqual = JSON.stringify(originalData) === JSON.stringify(editedData);
-      // if (isDataEqual) {
-      //   console.log('editedData 和 originalData 相等');
-      // } else {
-      //   console.log('editedData 和 originalData 不相等');
-      // }
-    } catch (error) {
-      console.error('同步数据时发生错误:', error);
-      ElMessage.error('Failed to synchronize data');
-      
-      // 错误时立即重置状态
-      isUpdating.value = false;
-      window.dispatchEvent(new CustomEvent('matrix-loading-changed', {
-        detail: { loading: false }
-      }));
-    }
-  }, 0);
+    });
+    
+    // 转换为数组格式
+    const transData = Object.values(groupedData);
+    
+    // 在控制台输出传递的数据
+    console.log('同步传递的数据:', transData);
+    
+    // 更新数据存储
+    datasetStore.setTransData(transData);
+    datasetStore.updateEditedDataFromTrans();
+    
+    ElMessage.success('Data synced successfully');
+  } catch (error) {
+    console.error('Sync error:', error);
+    ElMessage.error('Failed to sync data');
+  } finally {
+    isUpdating.value = false;
+  }
 };
 
 // 修改辅助函数：将小数形式的小时转换为HH:MM格式（不包含秒）

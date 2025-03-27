@@ -7,6 +7,7 @@ import { api } from '../services/api'
 import { useTimeSeriesStore } from '../stores/timeSeriesStore'
 import { ElMessage, ElScrollbar, ElSlider } from 'element-plus'
 import { getRandomColor, getColorByType } from '../utils/uiUtils'
+import { useDatasetStore } from '../stores/datasetStore'
 
 const props = defineProps({
   series: Object,
@@ -17,6 +18,7 @@ const props = defineProps({
 
 const emit = defineEmits(['click', 'hover'])
 const store = useTimeSeriesStore()
+const datasetStore = useDatasetStore()
 
 const showDecomposition = ref(false)
 const decompositionNumber = ref(2)
@@ -26,6 +28,9 @@ const isDecomposing = ref(false)
 const decomposedSeries = ref([])
 const isDecompNumberOpen = ref(false)
 const isModelOpen = ref(false)
+
+// 添加计算属性获取当前数据集类型
+const datasetType = computed(() => datasetStore.getCurrentDataset)
 
 // 监听子曲线可见性，控制父曲线可见性
 watch(() => decomposedSeries.value, (newSeries) => {
@@ -293,6 +298,72 @@ const isChildSeries = computed(() => {
   const childTypes = ['lf', 'mf', 'hf', 'low_freq', 'mid_freq', 'high_freq'];
   return props.series.parentId && childTypes.includes(props.series.type);
 });
+
+const extractUserId = (id) => {
+  const match = id.match(/user[_]?(\d+)/);
+  return match ? match[1] : id;
+}
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  
+  // 简化日期格式 yyyy.MM.dd
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[0]}.${parts[1]}.${parts[2]}`;
+  }
+  
+  return dateStr;
+}
+
+const getVariableClass = (variable) => {
+  switch(variable) {
+    case 'x': return 'bg-blue-100 text-blue-700';
+    case 'y': return 'bg-green-100 text-green-700';
+    case 'z': return 'bg-orange-100 text-orange-700';
+    default: return 'bg-gray-100 text-gray-700';
+  }
+}
+
+// 在 script 部分添加两个计算属性
+const seriesDate = computed(() => {
+  // 如果序列自身有日期，直接使用
+  if (props.series.date) {
+    return props.series.date;
+  }
+  
+  // 如果是子序列并且没有自己的日期，尝试从父序列获取
+  if (props.series.parentId) {
+    const parentSeries = store.series.find(s => s.id === props.series.parentId);
+    return parentSeries?.date || '';
+  }
+  
+  return '';
+});
+
+const seriesVariable = computed(() => {
+  // 如果序列自身有变量，直接使用
+  if (props.series.variable) {
+    return props.series.variable;
+  }
+  
+  // 如果是子序列并且没有自己的变量，尝试从父序列获取
+  if (props.series.parentId) {
+    const parentSeries = store.series.find(s => s.id === props.series.parentId);
+    return parentSeries?.variable || '';
+  }
+  
+  return '';
+});
+
+// 格式化类型显示
+const getTypeDisplay = (type) => {
+  if (!type || type === 'original') {
+    return 'Original';
+  }
+  // 其他类型保持全大写
+  return type.toUpperCase();
+}
 </script>
 
 <template>
@@ -306,9 +377,25 @@ const isChildSeries = computed(() => {
     <div class="flex items-center gap-2 mb-2">
       <!-- 类型标签在左上角 -->
       <span :class="getTypeClass(series.type)" class="font-bold ml-[100px]">
-        {{ series.type || 'original' }}
+        {{ getTypeDisplay(series.type) }}
       </span>
-      <span class="text-sm text-gray-700 font-semibold">{{ series.id }}</span>
+      
+      <!-- 用户ID显示为标签 -->
+      <span class="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm font-bold">
+        User {{ extractUserId(series.id) }}
+      </span>
+      
+      <!-- 日期显示为标签 -->
+      <span v-if="seriesDate" class="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm font-bold">
+        {{ formatDate(seriesDate) }}
+      </span>
+      
+      <!-- 变量标签：仅在 capture 数据集且存在变量信息时显示 -->
+      <span v-if="datasetType === 'capture' && seriesVariable" 
+            :class="getVariableClass(seriesVariable)" 
+            class="px-2 py-0.5 rounded text-sm font-bold">
+        {{ seriesVariable }}
+      </span>
       
       <!-- 只为非子序列显示删除和导出按钮 -->
       <template v-if="!isChildSeries">
@@ -636,5 +723,37 @@ const isChildSeries = computed(() => {
 /* 确保滑块在拖动时保持在顶部 */
 .compact-slider :deep(.el-slider__button-wrapper) {
   z-index: 1;
+}
+
+/* 添加变量标签的样式 */
+.variable-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* 添加用户ID和日期标签样式 */
+.user-tag, .date-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: #F3F3F3;
+  color: #707070;
+}
+
+/* 变量标签样式 */
+.variable-x {
+  background-color: #E6F0FD;
+  color: #1D4ED8;
+}
+
+.variable-y {
+  background-color: #DCFCE7;
+  color: #15803D;
+}
+
+.variable-z {
+  background-color: #FEF3C7;
+  color: #B45309;
 }
 </style>

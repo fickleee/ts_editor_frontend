@@ -61,6 +61,10 @@ const handleDrop = (e) => {
 
   const { userId, weekday } = draggedData;
   
+  // 只有capture数据集才添加变量信息
+  const currentDataset = datasetStore.getCurrentDataset;
+  const currentVariable = currentDataset === 'capture' ? datasetStore.selectedVariable : null;
+  
   // 找到对应用户的数据
   const userData = originalData.find(user => user.id === userId);
   if (!userData || !userData.data) {
@@ -91,14 +95,22 @@ const handleDrop = (e) => {
     });
   });
 
-  // 转换为目标格式
-  const trans_data = Object.entries(groupedByDay).map(([date, data]) => ({
-    id: userId,
-    date: date,
-    data: data.sort((a, b) => a.time.localeCompare(b.time)) // 按时间排序
-  }));
+  // 转换为目标格式，仅在capture数据集时添加变量信息
+  const trans_data = Object.entries(groupedByDay).map(([date, data]) => {
+    const seriesData = {
+      id: userId,
+      date: date,
+      data: data.sort((a, b) => a.time.localeCompare(b.time))
+    };
+    
+    // 只在capture数据集时添加variable属性
+    if (currentDataset === 'capture' && currentVariable) {
+      seriesData.variable = currentVariable;
+    }
+    
+    return seriesData;
+  });
 
- // TODO: 将转换后的数据传递给 TimeSeriesEditor 组件
   if (trans_data.length > 0) {
     // 在全局事件总线上触发一个事件以传递数据到 TimeSeriesEditor
     window.dispatchEvent(new CustomEvent('add-time-series', { 
