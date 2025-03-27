@@ -154,7 +154,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
           if (point && point.time >= start && point.time <= end) {
             newData[i] = {
               time: point.time + offset.x,
-              value: Math.max(0, Math.min(15000, point.value + offset.y))
+              value: Math.min(15000, point.value + offset.y)
             }
           }
         })
@@ -192,7 +192,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         if (point && point.time >= start && point.time <= end) {
           newData[i] = {
             time: point.time + offset.x,
-            value: Math.max(0, Math.min(15000, point.value + offset.y))
+            value: Math.min(15000, point.value + offset.y)
           }
         }
       })
@@ -805,7 +805,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     return result;
   }
 
-  const cloneSeries = (seriesId, targetTime) => {
+  const cloneSeries = (seriesId, sourceTimeRange, targetTimeRange) => {
     if (!selectedTimeRange.value) return;
     
     const seriesIndex = series.value.findIndex(s => s.id === seriesId);
@@ -822,8 +822,8 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     if (sourceData.length === 0) return;
     
     const duration = end - start;
-    const targetStart = targetTime;
-    const targetEnd = targetTime + duration;
+    const targetStart = targetTimeRange.start;
+    const targetEnd = targetTimeRange.end;
     
     const newData = [...series.value[seriesIndex].data];
     
@@ -836,7 +836,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     
     sourceData.forEach(point => {
       const newPoint = {
-        time: parseFloat((point.time - start + targetTime).toFixed(2)),
+        time: parseFloat((point.time - start + targetStart).toFixed(2)),
         value: parseFloat(point.value.toFixed(8))
       };
       newData.push(newPoint);
@@ -851,9 +851,9 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     };
     
     const afterData = getSeriesSnapshot([seriesId]);
-    recordOperation('clone', seriesId, { 
-      sourceRange: { start, end }, 
-      targetTime 
+    recordOperation('clone', seriesId, {
+      sourceTimeRange,
+      targetTimeRange
     }, beforeData, afterData);
   }
 
@@ -1105,7 +1105,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
           if (point && point.time >= start && point.time <= end) {
             newData[i] = {
               time: point.time + offset.x,
-              value: Math.max(0, Math.min(15000, point.value + offset.y))
+              value: Math.min(15000, point.value + offset.y)
             };
           }
         });
@@ -1143,7 +1143,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         if (point && point.time >= start && point.time <= end) {
           newData[i] = {
             time: point.time + offset.x,
-            value: Math.max(0, Math.min(15000, point.value + offset.y))
+            value: Math.min(15000, point.value + offset.y)
           };
         }
       });

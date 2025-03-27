@@ -85,6 +85,8 @@ const handleChartHover = (time) => {
   hoverTime.value = time
 }
 
+const initialSeriesState = ref(null)
+
 const selectTool = (toolId) => {
   if (selectionPending.value) {
     ElMessage.warning('Please confirm or cancel your selection first')
@@ -120,6 +122,9 @@ const selectTool = (toolId) => {
         if (initialRange && finalRange) {
           effectiveOffset.x = finalRange.start - initialRange.start;
         }
+      } else if (toolId === 'move-y') {
+        // 对于 move-y，我们可以通过比较点的值来计算偏移量
+        // 但这不是必需的，因为偏移量主要用于显示，我们关心的是完整的 beforeData 和 afterData
       }
       
       store.recordBatchOperation(
@@ -127,9 +132,10 @@ const selectTool = (toolId) => {
         selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries,
         { 
           type: toolId,
-          offset: effectiveOffset 
+          offset: effectiveOffset,
+          initialState: initialSeriesState.value  // 添加初始状态到参数中
         }, 
-        initialSeriesState.value, 
+        initialSeriesState.value.series,  // 使用初始状态作为 beforeData 
         finalState
       );
       
@@ -159,7 +165,7 @@ const selectTool = (toolId) => {
     if (toolId === 'move-x' || toolId === 'move-y') {
       if (store.selectedTimeRange) {
         initialSeriesState.value = {
-          timeRange: { ...store.selectedTimeRange },  // 保存初始时间范围
+          timeRange: { ...store.selectedTimeRange },
           series: store.getSeriesSnapshot(
             selectedSeriesId.value ? [selectedSeriesId.value] : store.selectedSeries
           )
@@ -219,85 +225,141 @@ const handleChartClick = (time, value) => {
 
   switch (activeTool.value) {
     case 'clone':
-      if (store.selectedTimeRange) {
-        if (selectedSeriesId.value) {
-          store.cloneSeries(selectedSeriesId.value, time)
-          
-          const { start, end } = store.selectedTimeRange
-          const duration = end - start
-          cloneHighlightArea.value = {
-            seriesId: selectedSeriesId.value,
-            start: time,
-            end: time + duration
-          }
-          
-          setTimeout(() => {
-            cloneHighlightArea.value = null
-          }, 1000)
-        } else {
-          store.selectedSeries.forEach(id => {
-            store.cloneSeries(id, time)
-          })
-        }
-      }
+      handleCloneOperation(time)
       break
   }
 }
 
-// 添加一个函数计算当前选择序列的值范围，并返回对应的灵敏度系数
-const calculateDynamicSensitivity = (seriesId) => {
-  // 默认灵敏度系数
-  const defaultSensitivity = 0.001;
-  const minSensitivity = 0.005;  // 最小灵敏度（精细控制）
-  const maxSensitivity = 1;    // 最大灵敏度（快速调整）
+// 修改 handleCloneOperation 函数，支持多条曲线克隆
+const handleCloneOperation = (targetTime) => {
+  if (!store.selectedTimeRange) {
+    ElMessage.warning('Please select a time range first')
+    return
+  }
   
-  // 如果没有选择序列，返回默认值
-  if (!seriesId) return defaultSensitivity;
+  // 确定需要克隆的曲线列表
+  const seriesToClone = selectedSeriesId.value 
+    ? [selectedSeriesId.value] 
+    : store.selectedSeries
+  
+  if (seriesToClone.length === 0) {
+    ElMessage.warning('Please select at least one series to clone')
+    return
+  }
+  
+  // 构建源时间范围和目标时间范围
+  const sourceTimeRange = { ...store.selectedTimeRange }
+  const duration = sourceTimeRange.end - sourceTimeRange.start
+  
+  // 构建目标时间范围
+  const targetTimeRange = {
+    start: targetTime,
+    end: targetTime + duration
+  }
+  
+  // 设置目标区域高亮显示 - 只显示主要选中的或第一个曲线的高亮
+  const highlightSeriesId = selectedSeriesId.value || seriesToClone[0]
+  cloneHighlightArea.value = {
+    seriesId: highlightSeriesId,
+    start: targetTime,
+    end: targetTime + duration
+  }
+  
+  // 为每条选中的曲线执行克隆
+  seriesToClone.forEach(seriesId => {
+    store.cloneSeries(seriesId, sourceTimeRange, targetTimeRange)
+  })
+  
+  // 设置定时器，两秒后清除高亮和重置工具
+  setTimeout(() => {
+    cloneHighlightArea.value = null
+    activeTool.value = null
+    tools.value.forEach(tool => tool.active = false)
+  }, 2000)
+}
+
+// 添加一个引用来访问图表组件
+const chartRef = ref(null)
+
+// 完全重新设计的灵敏度算法，主要基于最大值
+const calculateChartBasedSensitivity = (seriesId) => {
+  // 基础参数
+  const minSensitivity = 0.0005  // 非常小的最小灵敏度，用于小数值
+  const maxSensitivity = 10.0    // 非常大的最大灵敏度，用于超大数值
+  
+  // 如果没有选择序列，返回默认中等灵敏度
+  if (!seriesId) return 0.1
   
   // 获取当前选择的序列
-  const selectedSeries = store.series.find(s => s.id === seriesId);
+  const selectedSeries = store.series.find(s => s.id === seriesId)
   if (!selectedSeries || !selectedSeries.data || selectedSeries.data.length === 0) {
-    return defaultSensitivity;
+    return 0.1
   }
   
   // 获取选中区域内的数据点
   const rangeData = selectedSeries.data.filter(point => {
     return point && store.selectedTimeRange &&
            point.time >= store.selectedTimeRange.start && 
-           point.time <= store.selectedTimeRange.end;
-  });
+           point.time <= store.selectedTimeRange.end
+  })
   
   // 如果选中区域内没有数据点，使用全部数据点
-  const dataToAnalyze = rangeData.length > 0 ? rangeData : selectedSeries.data;
+  const dataToAnalyze = rangeData.length > 0 ? rangeData : selectedSeries.data
   
-  // 计算数据值范围
-  const values = dataToAnalyze.map(point => point.value);
-  const maxValue = Math.max(...values);
-  const minValue = Math.min(...values);
-  const valueRange = maxValue - minValue;
+  // 查找最大绝对值 - 考虑正负值
+  const absValues = dataToAnalyze.map(point => Math.abs(point.value))
+  const maxAbsValue = absValues.length > 0 ? Math.max(...absValues) : 0
   
-  // 线性映射灵敏度系数
-  // 当值范围小时使用较小系数（精细控制）
-  // 当值范围大时使用较大系数（快速调整）
-  
-  // 设置基准范围，用于归一化计算
-  const baseRange = 100;   // 基准值范围
-  const baseScale = 0.001; // 基准灵敏度
-  
-  // 计算线性灵敏度系数
-  let sensitivity;
-  if (valueRange <= 0) {
-    sensitivity = defaultSensitivity;
-  } else {
-    // 线性映射公式：灵敏度 = 基准灵敏度 * (当前范围 / 基准范围)
-    sensitivity = baseScale * (valueRange / baseRange);
-    
-    // 限制在合理范围内
-    sensitivity = Math.max(minSensitivity, Math.min(maxSensitivity, sensitivity));
+  // 获取图表高度
+  let chartHeight = 300 // 默认值
+  if (chartRef.value && chartRef.value.$el) {
+    chartHeight = chartRef.value.$el.clientHeight
   }
   
-  return sensitivity;
-};
+  // 根据最大值使用不同的灵敏度计算方式
+  let sensitivity
+  
+  // 完全基于最大值的分段式灵敏度计算
+  if (maxAbsValue <= 0.01) {
+    // 几乎为零的数值，使用极低灵敏度
+    sensitivity = 0.0005
+  } else if (maxAbsValue <= 1) {
+    // 非常小的数值 (0-1)
+    sensitivity = 0.001
+  } else if (maxAbsValue <= 3) {
+    // 小数值 (1-3)
+    sensitivity = 0.005
+  } else if (maxAbsValue <= 10) {
+    // 小到中等数值 (3-10)
+    sensitivity = 0.01
+  } else if (maxAbsValue <= 100) {
+    // 中等数值 (10-100)
+    sensitivity = 0.05
+  } else if (maxAbsValue <= 500) {
+    // 中大数值 (100-500)
+    sensitivity = 0.1
+  } else if (maxAbsValue <= 1000) {
+    // 大数值 (500-1000)
+    sensitivity = 0.5
+  } else if (maxAbsValue <= 5000) {
+    // 很大数值 (1000-5000)
+    sensitivity = 1.0
+  } else if (maxAbsValue <= 10000) {
+    // 超大数值 (5000-10000)
+    sensitivity = 2.0
+  } else {
+    // 极大数值 (10000+) - 使用对数比例增加灵敏度
+    const logScale = Math.log10(maxAbsValue / 1000)
+    sensitivity = Math.max(3.0, logScale * 2)
+  }
+  
+  // 应用图表高度调整 - 图表越高，每像素移动影响越小，所以增加灵敏度
+  const heightFactor = 300 / chartHeight
+  sensitivity *= heightFactor
+  
+  // 限制在合理范围内
+  return Math.max(minSensitivity, Math.min(maxSensitivity, sensitivity))
+}
 
 const handleChartDrag = (timeRange, valueRange, dragPoint) => {
   if (!isDragging.value) return
@@ -341,12 +403,20 @@ const handleChartDrag = (timeRange, valueRange, dragPoint) => {
         }
         
         if (selectedSeriesId.value) {
-          const dynamicSensitivity = calculateDynamicSensitivity(selectedSeriesId.value);
-          store.moveSeriesWithoutRecord(selectedSeriesId.value, { x: 0, y: offset * dynamicSensitivity })
+          // 使用基于图表的灵敏度调整
+          const chartSensitivity = calculateChartBasedSensitivity(selectedSeriesId.value)
+          store.moveSeriesWithoutRecord(selectedSeriesId.value, { 
+            x: 0, 
+            y: offset * chartSensitivity
+          })
         } else {
           store.selectedSeries.forEach(id => {
-            const dynamicSensitivity = calculateDynamicSensitivity(id);
-            store.moveSeriesWithoutRecord(id, { x: 0, y: offset * dynamicSensitivity })
+            // 为每条曲线单独计算灵敏度
+            const chartSensitivity = calculateChartBasedSensitivity(id)
+            store.moveSeriesWithoutRecord(id, { 
+              x: 0, 
+              y: offset * chartSensitivity 
+            })
           })
         }
       }
@@ -377,6 +447,9 @@ const handleChartDrag = (timeRange, valueRange, dragPoint) => {
       }
       break
   }
+  
+  // 更新拖拽起点
+  dragStartPoint.value = { ...dragPoint }
 }
 
 const handleSelectionComplete = (newSelections) => {
@@ -780,9 +853,6 @@ watch(() => store.series, () => {
   debouncedUpdateChart();
 }, { deep: true });
 
-// Add a new ref to store initial series state
-const initialSeriesState = ref(null);
-
 // 添加一个新的计算属性，用于按类型获取子序列
 const getChildSeriesByType = (parentId, type) => {
   return store.series.filter(s => 
@@ -834,6 +904,7 @@ const getChildSeriesByType = (parentId, type) => {
           <div class="flex-1 flex flex-col overflow-hidden">
             <div class="flex-1 px-6 pt-2 pb-4">
               <TimeSeriesChart
+                ref="chartRef"
                 :series="[...store.series, ...(store.previewSeries ? [store.previewSeries] : [])]"
                 :height="null"
                 :showGrid="true"

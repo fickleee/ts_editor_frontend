@@ -492,13 +492,18 @@ const exportEditHistory = () => {
         let valuesBefore = [];
         let valuesAfter = [];
         
-        if (op.beforeData && op.afterData && op.beforeData[seriesId] && op.afterData[seriesId]) {
+        if (op.beforeData && op.afterData) {
+          // 确保序列数据存在并正确处理
+          const beforeSeriesData = op.beforeData[seriesId] || [];
+          const afterSeriesData = op.afterData[seriesId] || [];
+          
           if (op.timeRange) {
-            valuesBefore = op.beforeData[seriesId]
+            // 获取操作影响的时间范围内的数据点
+            valuesBefore = beforeSeriesData
               .filter(point => point && point.time >= op.timeRange.start && point.time <= op.timeRange.end)
               .map(point => point.value);
             
-            valuesAfter = op.afterData[seriesId]
+            valuesAfter = afterSeriesData
               .filter(point => point && point.time >= op.timeRange.start && point.time <= op.timeRange.end)
               .map(point => point.value);
           }
@@ -531,6 +536,40 @@ const exportEditHistory = () => {
             convertDecimalHoursToHHMM(op.timeRange.start),
             convertDecimalHoursToHHMM(op.timeRange.end)
           ]];
+        } else {
+          // 如果没有初始状态，使用标准时间范围
+          const timeRange = [
+            convertDecimalHoursToHHMM(op.timeRange.start),
+            convertDecimalHoursToHHMM(op.timeRange.end)
+          ];
+          rangeBefore = [timeRange];
+          rangeAfter = [timeRange];
+        }
+      } else if (op.type === 'move-y' || op.type === 'move-xy') {
+        // 对于move-y和move-xy操作，使用相同的时间范围
+        const timeRange = [
+          convertDecimalHoursToHHMM(op.timeRange.start),
+          convertDecimalHoursToHHMM(op.timeRange.end)
+        ];
+        rangeBefore = [timeRange];
+        rangeAfter = [timeRange];
+      } else if (op.type === 'clone') {
+        // 添加对克隆操作的特殊处理
+        // 源范围作为rangeBefore
+        rangeBefore = [[
+          convertDecimalHoursToHHMM(op.timeRange.start),
+          convertDecimalHoursToHHMM(op.timeRange.end)
+        ]];
+        
+        // 目标范围作为rangeAfter，从params中获取
+        if (op.params && op.params.targetTimeRange) {
+          rangeAfter = [[
+            convertDecimalHoursToHHMM(op.params.targetTimeRange.start),
+            convertDecimalHoursToHHMM(op.params.targetTimeRange.end)
+          ]];
+        } else {
+          // 如果没有目标范围参数，则使用与源相同的范围
+          rangeAfter = [...rangeBefore];
         }
       } else if (op.type === 'expand' && op.params && op.params.selections) {
         // 对于expand操作，包含所有选择的范围
@@ -567,7 +606,10 @@ const exportEditHistory = () => {
   // 过滤掉没有有效数据的操作记录
   const validOperations = formattedOperations.filter(
     op => op.series && op.series.length > 0 && 
-    op.series.some(s => s.value_before_edit.length > 0 || s.value_after_edit.length > 0)
+    op.series.some(s => 
+      (s.value_before_edit && s.value_before_edit.length > 0) || 
+      (s.value_after_edit && s.value_after_edit.length > 0)
+    )
   );
   
   // 转换为JSON字符串并下载
