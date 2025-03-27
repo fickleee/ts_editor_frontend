@@ -370,9 +370,9 @@ const isChildSeries = computed(() => {
           class="ml-auto mr-4" style="position: absolute; right: 4px; z-index: 10;">
           
           <!-- 垂直线SVG - 从顶部到箭头位置 -->
-          <svg width="24" height="50" viewBox="0 0 24 50" fill="none" xmlns="http://www.w3.org/2000/svg"
-            style="position: absolute; top: -35px; right: 0;">
-            <path d="M1.5 0L1.5 35" stroke="black" stroke-width="2"/>
+          <svg width="24" height="40" viewBox="0 0 24 40" fill="none" xmlns="http://www.w3.org/2000/svg"
+            style="position: absolute; top: -25px; right: 0;">
+            <path d="M1.5 0L1.5 25" stroke="black" stroke-width="2"/>
           </svg>
 
           <!-- 向右箭头 (HF和MF) - 增加垂直线长度 -->
@@ -388,7 +388,7 @@ const isChildSeries = computed(() => {
           
           <!-- 垂直线SVG - 从顶部到箭头位置 -->
           <svg width="24" height="54" viewBox="0 0 24 54" fill="none" xmlns="http://www.w3.org/2000/svg"
-            style="position: absolute; top: -54px; right: 0;">
+            style="position: absolute; top: -45px; right: 0;">
             <path d="M1.5 0L1.5 54" stroke="black" stroke-width="2"/>
           </svg>
           <!-- 向右下箭头 (LF) - 调整高度和位置 -->

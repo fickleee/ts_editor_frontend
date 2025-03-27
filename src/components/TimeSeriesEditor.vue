@@ -1043,7 +1043,7 @@ const getSimilarityColor = (similarity) => {
               <div class="h-full flex flex-col overflow-hidden">               
                 <el-scrollbar class="flex-1 p-6">
                   <div v-if="generatePatterns.length === 0" class="text-center py-8 text-gray-500">
-                    No similar patterns found
+                    Please select one time series to removal
                   </div>
                   
                   <div v-else class="space-y-4">
