@@ -287,6 +287,12 @@ const getChildSeries = computed(() => {
     });
   };
 });
+
+// 判断是否为子序列的计算属性
+const isChildSeries = computed(() => {
+  const childTypes = ['lf', 'mf', 'hf', 'low_freq', 'mid_freq', 'high_freq'];
+  return props.series.parentId && childTypes.includes(props.series.type);
+});
 </script>
 
 <template>
@@ -304,21 +310,24 @@ const getChildSeries = computed(() => {
       </span>
       <span class="text-sm text-gray-700 font-semibold">{{ series.id }}</span>
       
-      <button 
-        @click.stop="deleteSeries"
-        class="p-2 rounded hover:bg-gray-100"
-        title="Delete series"
-      >
-        <img src="/src/assets/delete.svg" alt="Delete" class="w-4 h-4" />
-      </button>
-      
-      <button 
-        @click.stop="exportSeries"
-        class="text-sm px-2 py-1  hover:bg-gray-100 flex items-center gap-1"
-        title="Export as CSV"
-      >
-        <img src="/src/assets/Export_series.svg" alt="Export" class="w-4 h-4" />
-      </button>
+      <!-- 只为非子序列显示删除和导出按钮 -->
+      <template v-if="!isChildSeries">
+        <button 
+          @click.stop="deleteSeries"
+          class="p-2 rounded hover:bg-gray-100"
+          title="Delete series"
+        >
+          <img src="/src/assets/delete.svg" alt="Delete" class="w-4 h-4" />
+        </button>
+        
+        <button 
+          @click.stop="exportSeries"
+          class="text-sm px-2 py-1  hover:bg-gray-100 flex items-center gap-1"
+          title="Export as CSV"
+        >
+          <img src="/src/assets/Export_series.svg" alt="Export" class="w-4 h-4" />
+        </button>
+      </template>
     </div>
     
     <!-- 显示框中的控制按钮区域 -->
