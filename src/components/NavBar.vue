@@ -418,13 +418,22 @@ const handleSyncClick = () => {
           data: formattedPoints
         };
       });
-      
       // 更新到 store 以传递给左侧组件
       timeSeriesStore.updateEditedSeriesData(transData);
       // 设置传输数据并更新编辑后的数据
       datasetStore.setTransData(transData);
       datasetStore.updateEditedDataFromTrans();
+      console.log(transData);
       
+      // // 判断editedData是否和originalData相等（深度比较）
+      // const originalData = datasetStore.getOriginalData;
+      // const editedData = datasetStore.getEditedData;
+      // const isDataEqual = JSON.stringify(originalData) === JSON.stringify(editedData);
+      // if (isDataEqual) {
+      //   console.log('editedData 和 originalData 相等');
+      // } else {
+      //   console.log('editedData 和 originalData 不相等');
+      // }
     } catch (error) {
       console.error('同步数据时发生错误:', error);
       ElMessage.error('Failed to synchronize data');

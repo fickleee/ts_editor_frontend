@@ -17,7 +17,7 @@
     <!-- 控制面板 -->
     <div 
       v-if="datasetStore.getCurrentDataset"
-      class="absolute top-2 w-full px-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 z-10"
+      class="control-header absolute top-2 w-full px-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 z-10"
     >
       <!-- 左侧下拉选择框 -->
       <div class="flex gap-4">
@@ -781,7 +781,9 @@ watch(() => datasetStore.getSelectedUserId, (newUserId) => {
 canvas {
   touch-action: none;
 }
-
+.control-header {
+  background-color: rgba(255, 255, 255, 0.8);
+}
 /* 滑块样式定制 */
 .slider-container :deep(.el-slider) {
   height: 28px;

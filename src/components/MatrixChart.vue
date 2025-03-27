@@ -393,6 +393,16 @@ const createOverviewChart = (data, container) => {
             .attr('r', 2)
             .attr('fill', colorScale(dataPoint.userId))
             .attr('class', `outlier-point user-${dataPoint.userId} weekday-${dataPoint.weekday}`)
+            .attr('fill-opacity', () => {
+              // 只对 capture 数据集进行检查
+              if (datasetStore.getCurrentDataset === 'capture' && 
+                  dataPoint.annotations && 
+                  dataPoint.annotations.length === 1 && 
+                  dataPoint.annotations[0] === 'nan') {
+                return 0.2;
+              }
+              return 1;
+            })
             .attr('data-tooltip-content', () => {
               let content = `
                 <div class="tooltip-content">
@@ -932,7 +942,6 @@ const showUserDayDetail = (data, userId, day, detailGroup, width, height, aggreg
 
 // 创建折线图表
 const createLineChart = (data, container, allUserDataByWeek) => {
-  // 添加数据检查
   if (!data || !data.length) {
     console.warn('No data received');
     return;
@@ -943,7 +952,7 @@ const createLineChart = (data, container, allUserDataByWeek) => {
     console.warn('Invalid data structure', data);
     return;
   }
-
+  
   // 清除已有的图表
   d3.select(container).selectAll('*').remove();
 
@@ -1142,6 +1151,11 @@ const createLineChart = (data, container, allUserDataByWeek) => {
                 MATRIX_CHART.COLORS.WEEKEND_LINE : 
                 MATRIX_CHART.COLORS.WEEKDAY_LINE;
               
+
+              // weekData.res[0].value如果为null，就返回
+              if (weekData.res[0].value == null) {
+                return;
+              }
               // 绘制周数据线
               const weekPath = userGroup.append('path')
                 .datum(weekDataPoints)
@@ -1535,20 +1549,15 @@ const fetchData = async () => {
       ]);
       // 更新数据
       allUserData.value = dayRes;
-      allUserDataByWeek.value = weeklyRes;
+      // allUserDataByWeek.value = weeklyRes;
       originalData.value = originalRes;
+      allUserData.value = aggregateUserData(originalRes);
+      allUserDataByWeek.value = aggregateDataByWeekday(originalRes);
       datasetStore.setOriginalData(originalRes); // 存储到 store
     }
     else {
-      // 使用统一的reqDataMix接口替代三个独立接口
-      // const mixResult = await reqDataMix(datasetStore.getCurrentDataset);
       const res = await reqDataOriginal(datasetStore.getCurrentDataset);
-      // 从混合结果中获取对应数据
-      // allUserData.value = mixResult.preprocess;
-      // allUserDataByWeek.value = mixResult.weekly;
-      // originalData.value = mixResult.original;
       originalData.value = res;
-      // 使用原始数据计算周数据
       allUserData.value = aggregateUserData(res);
       allUserDataByWeek.value = aggregateDataByWeekday(res);
       datasetStore.setOriginalData(res); // 存储到 store
@@ -1556,10 +1565,9 @@ const fetchData = async () => {
 
     // 等待下一个渲染周期，确保 DOM 更新完成
     await nextTick();
-    
     // 更新图表，使用 editedData 而不是 originalData
     if (lineChart.value) {
-      createLineChart(datasetStore.getEditedData, lineChart.value, allUserDataByWeek.value);
+      createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
     }
     
     // 更新概览图表，使用 editedData
@@ -1741,27 +1749,6 @@ watch(() => datasetStore.getSelectedUserId, (newUserId) => {
     }
   }
 }, { immediate: true });
-
-// // 修改事件处理函数
-// const handleOutlierDragEnd = (event) => {
-//   const { userId, weekday, weekdayName, droppedInEditView } = event.detail;
-//   console.log(`拖拽结束 - 用户ID: ${userId}, 工作日: ${weekdayName} (${weekday}), 放置在EditView中: ${droppedInEditView}`);
-  
-//   if (droppedInEditView) {
-//     console.log('成功放置到EditView中，可以进行后续处理');
-//     // 这里可以添加相应的处理逻辑
-//   }
-// };
-
-// const handleOutlierDragStart = (event) => {
-//   const { userId, weekday, weekdayName } = event.detail;
-//   console.log(`拖拽开始 - 用户ID: ${userId}, 工作日: ${weekdayName} (${weekday})`);
-// };
-
-// const handleOutlierDrag = (event) => {
-//   const { userId, weekday, weekdayName, isOverEditView } = event.detail;
-//   console.log(`拖拽中 - 用户ID: ${userId}, 工作日: ${weekdayName} (${weekday}), 在EditView上方: ${isOverEditView}`);
-// };
 </script>
 
 <style>

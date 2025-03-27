@@ -638,7 +638,7 @@ const aggregateDataForRadialView = (editedData) => {
       const sampleIndex = Math.floor((hours * 60 + minutes) / SAMPLE_INTERVAL);
       
       if (sampleIndex < SAMPLES_PER_DAY) {
-        sampledData[sampleIndex].values.push(point.value);
+        sampledData[sampleIndex].values.push(Math.abs(point.value));
         sampledData[sampleIndex].times.push(point.time);
       }
     });
