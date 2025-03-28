@@ -445,7 +445,7 @@ const convertDecimalHoursToHHMM = (decimalHours) => {
   return `${formattedHours}:${formattedMinutes}`;
 };
 
-// 修改导出编辑历史函数，使用新的时间格式函数
+// 修改导出编辑历史函数，使用新的时间格式函数和更好的日期处理
 const exportEditHistory = () => {
   // 获取编辑历史的副本，而不是直接使用原始历史
   const history = JSON.parse(JSON.stringify(timeSeriesStore.exportEditHistory()));
@@ -458,6 +458,9 @@ const exportEditHistory = () => {
     // 处理每个被编辑的序列
     if (op.seriesIds && op.seriesIds.length > 0) {
       op.seriesIds.forEach(seriesId => {
+        // 查找存储中的实际序列对象，以获取日期和其他属性
+        const seriesObj = timeSeriesStore.series.find(s => s.id === seriesId);
+        
         // 从seriesId中提取用户ID和日期
         const fullMatch = seriesId.match(/^user[_]?(\d+)[_]?(\d{4}[-]?\d{1,2}[-]?\d{1,2})$/);
         const userOnlyMatch = seriesId.match(/^user[_]?(\d+)$/);
@@ -465,11 +468,19 @@ const exportEditHistory = () => {
         let userId = '';
         let dateStr = '';
         
-        if (fullMatch) {
+        // 优先使用序列对象中的日期
+        if (seriesObj && seriesObj.date) {
+          dateStr = seriesObj.date;
+          
+          // 从ID提取用户ID
+          const idMatch = seriesId.match(/user[_]?(\d+)/);
+          userId = idMatch ? idMatch[1] : seriesId;
+        } else if (fullMatch) {
           userId = fullMatch[1];
           dateStr = fullMatch[2];
         } else if (userOnlyMatch) {
           userId = userOnlyMatch[1];
+          // 如果没有日期信息，使用当前日期作为默认值
           dateStr = new Date().toISOString().split('T')[0];
         } else {
           userId = seriesId;
@@ -497,13 +508,26 @@ const exportEditHistory = () => {
           }
         }
         
+        // 添加变量信息（针对capture数据集）
+        let variable = null;
+        if (seriesObj && seriesObj.variable) {
+          variable = seriesObj.variable;
+        }
+        
         // 添加到序列数据集合中
-        allSeriesData.push({
+        const seriesData = {
           id: userId,
           date: dateStr,
           valuesBefore,
           valuesAfter
-        });
+        };
+        
+        // 仅在变量存在时添加此属性
+        if (variable) {
+          seriesData.variable = variable;
+        }
+        
+        allSeriesData.push(seriesData);
       });
     }
     
@@ -555,9 +579,16 @@ const exportEditHistory = () => {
             convertDecimalHoursToHHMM(op.params.targetTimeRange.start),
             convertDecimalHoursToHHMM(op.params.targetTimeRange.end)
           ]];
+        } else if (op.params && op.params.sourceRange && op.params.targetRange) {
+          // 使用更新的参数格式，这是在TimeSeriesEditor.vue中使用的格式
+          rangeAfter = [[
+            convertDecimalHoursToHHMM(op.params.targetRange.start),
+            convertDecimalHoursToHHMM(op.params.targetRange.end)
+          ]];
         } else {
           // 如果没有目标范围参数，则使用与源相同的范围
           rangeAfter = [...rangeBefore];
+          console.warn('Clone operation missing target range information');
         }
       } else if (op.type === 'expand' && op.params && op.params.selections) {
         // 对于expand操作，包含所有选择的范围
@@ -580,14 +611,23 @@ const exportEditHistory = () => {
     // 构建最终的操作记录
     return {
       operation: op.type === 'replace' ? 'removal' : op.type,
-      series: allSeriesData.map(seriesData => ({
-        id: seriesData.id,
-        date: seriesData.date,
-        range_before: rangeBefore,
-        range_after: rangeAfter,
-        value_before_edit: seriesData.valuesBefore,
-        value_after_edit: seriesData.valuesAfter
-      }))
+      series: allSeriesData.map(seriesData => {
+        const result = {
+          id: seriesData.id,
+          date: seriesData.date,
+          range_before: rangeBefore,
+          range_after: rangeAfter,
+          value_before_edit: seriesData.valuesBefore,
+          value_after_edit: seriesData.valuesAfter
+        };
+        
+        // 仅当变量存在时才添加
+        if (seriesData.variable) {
+          result.variable = seriesData.variable;
+        }
+        
+        return result;
+      })
     };
   });
   
