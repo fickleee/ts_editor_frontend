@@ -794,11 +794,15 @@ onMounted(() => {
     data.forEach(item => {
       const { id, date, variable, data: seriesData } = item;
       
-      // 构建唯一的序列ID，仅在capture数据集时添加变量信息
+      // 构建唯一的序列ID - 修改这部分逻辑
       let seriesId;
       if (currentDataset === 'capture' && variable) {
         seriesId = `user_${id}_${variable}`;
+      } else if (date) {
+        // 对于非capture数据集，如果有日期信息则将其包含在ID中
+        seriesId = `user_${id}_${date}`;
       } else {
+        // 如果没有日期信息，则使用简单的ID
         seriesId = `user_${id}`;
       }
       

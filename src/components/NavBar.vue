@@ -351,7 +351,7 @@ const handleSyncClick = async () => {
     // 遍历所有序列
     allSeries.forEach(series => {
       // 跳过隐藏的系列和子系列
-      if (!series.visible || series.parentId) return;
+      if (series.parentId) return;
       
       // 提取用户ID
       const match = series.id.match(/user[_]?(\d+)/);
