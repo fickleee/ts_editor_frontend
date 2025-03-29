@@ -163,6 +163,11 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const seriesIndex = series.value.findIndex(s => s.id === seriesId)
     if (seriesIndex === -1) return
 
+    // Get current dataset type to check if we should prevent negative values
+    const datasetStore = useDatasetStore();
+    const currentDataset = datasetStore.getCurrentDataset;
+    const preventNegative = currentDataset === 'step' || currentDataset === 'electricity';
+
     const beforeData = getSeriesSnapshot([seriesId])
     
     const operationType = offset.x !== 0 && offset.y === 0 ? 'move-x' : 
@@ -184,10 +189,16 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         
         newData.forEach((point, i) => {
           if (point && point.time >= start && point.time <= end) {
+            // Apply prevention of negative values for step and electricity datasets
+            let newValue = point.value + offset.y;
+            if (preventNegative) {
+              newValue = Math.max(0, newValue);
+            }
+            
             newData[i] = {
               time: point.time + offset.x,
-              value: Math.min(15000, point.value + offset.y)
-            }
+              value: Math.min(15000, newValue)
+            };
           }
         })
         
@@ -221,10 +232,16 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       
       newData.forEach((point, i) => {
         if (point && point.time >= start && point.time <= end) {
+          // Apply prevention of negative values for step and electricity datasets
+          let newValue = point.value + offset.y;
+          if (preventNegative) {
+            newValue = Math.max(0, newValue);
+          }
+          
           newData[i] = {
             time: point.time + offset.x,
-            value: Math.min(15000, point.value + offset.y)
-          }
+            value: Math.min(15000, newValue)
+          };
         }
       })
       
@@ -1206,6 +1223,11 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     const seriesIndex = series.value.findIndex(s => s.id === seriesId);
     if (seriesIndex === -1) return;
 
+    // Get current dataset type to check if we should prevent negative values
+    const datasetStore = useDatasetStore();
+    const currentDataset = datasetStore.getCurrentDataset;
+    const preventNegative = currentDataset === 'step' || currentDataset === 'electricity';
+
     const currentSeries = series.value[seriesIndex];
     const { start, end } = selectedTimeRange.value;
 
@@ -1222,9 +1244,15 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         
         newData.forEach((point, i) => {
           if (point && point.time >= start && point.time <= end) {
+            // Apply prevention of negative values for step and electricity datasets
+            let newValue = point.value + offset.y;
+            if (preventNegative) {
+              newValue = Math.max(0, newValue);
+            }
+            
             newData[i] = {
               time: point.time + offset.x,
-              value: Math.min(15000, point.value + offset.y)
+              value: Math.min(15000, newValue)
             };
           }
         });
@@ -1259,9 +1287,15 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
       
       newData.forEach((point, i) => {
         if (point && point.time >= start && point.time <= end) {
+          // Apply prevention of negative values for step and electricity datasets
+          let newValue = point.value + offset.y;
+          if (preventNegative) {
+            newValue = Math.max(0, newValue);
+          }
+          
           newData[i] = {
             time: point.time + offset.x,
-            value: Math.min(15000, point.value + offset.y)
+            value: Math.min(15000, newValue)
           };
         }
       });

@@ -281,11 +281,20 @@ const handleCloneOperation = (targetTime) => {
 // 添加一个引用来访问图表组件
 const chartRef = ref(null)
 
-// 完全重新设计的灵敏度算法，主要基于最大值
+// 完全重新设计的灵敏度算法，主要基于最大值，并针对电力数据集进行优化
 const calculateChartBasedSensitivity = (seriesId) => {
   // 基础参数
   const minSensitivity = 0.0005  // 非常小的最小灵敏度，用于小数值
-  const maxSensitivity = 10.0    // 非常大的最大灵敏度，用于超大数值
+  const maxSensitivity = 1000    // 非常大的最大灵敏度，用于超大数值
+  
+  // 获取当前数据集类型
+  const datasetStore = useDatasetStore()
+  const currentDataset = datasetStore.getCurrentDataset
+  
+  // 如果是电力数据集，使用更高的灵敏度
+  if (currentDataset === 'electricity') {
+    return 5 // 为电力数据集提供更高的灵敏度
+  }
   
   // 如果没有选择序列，返回默认中等灵敏度
   if (!seriesId) return 0.1

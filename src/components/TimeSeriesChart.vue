@@ -641,7 +641,7 @@ const initChart = () => {
         .tickFormat(d => d.toFixed(1))
       )
       .selectAll('text')
-      .style('font-size', '10px')
+      .style('font-size', '9px')
       .style('fill', '#666')
       .attr('dx', '-5')
       .attr('dy', '0.3em')
