@@ -1175,6 +1175,25 @@ const createLineChart = (data, container, allUserDataByWeek) => {
                 .attr('stroke', 'transparent')
                 .attr('stroke-width', 20) // 更宽的区域便于鼠标交互
                 .style('cursor', 'grab')
+                .attr('data-tooltip-content', () => {
+                  // 获取周几名称
+                  const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                  const weekdayName = weekdayNames[weekData.weekday == 6 ? 0 : weekData.weekday + 1];
+                  
+                  let content = `
+                    <div class="tooltip-content">
+                      <div class="tooltip-row">
+                        <span class="label">User:</span>
+                        <span class="value">${user.id}</span>
+                      </div>
+                      <div class="tooltip-row">
+                        <span class="label">Weekday:</span>
+                        <span class="value">${weekdayName}</span>
+                      </div>
+                    </div>
+                  `;
+                  return content;
+                })
                 .on('mouseover', function() {
                   // 高亮当前周数据线
                   weekPath
@@ -1191,6 +1210,43 @@ const createLineChart = (data, container, allUserDataByWeek) => {
                   
                   // 将当前用户组提升到顶层
                   userGroup.raise();
+                  
+                  // 创建或更新tooltip
+                  const path = d3.select(this);
+                  const tooltipContent = path.attr('data-tooltip-content');
+                  const tooltip = document.createElement('div');
+                  tooltip.className = 'el-tooltip__popper is-dark';
+                  tooltip.innerHTML = tooltipContent;
+                  
+                  // 获取鼠标位置
+                  const mouseEvent = d3.event || window.event;
+                  const mouseX = mouseEvent ? mouseEvent.clientX : d3.mouse(document.body)[0];
+                  const mouseY = mouseEvent ? mouseEvent.clientY : d3.mouse(document.body)[1];
+                  
+                  // 设置tooltip位置
+                  tooltip.style.position = 'fixed';
+                  tooltip.style.left = `${mouseX + 10}px`;
+                  tooltip.style.top = `${mouseY - 10}px`;
+                  
+                  // 存储tooltip引用
+                  this._tooltip = tooltip;
+                  
+                  // 添加延迟显示
+                  this._tooltipTimeout = setTimeout(() => {
+                    // 添加到body
+                    document.body.appendChild(tooltip);
+                  }, 300);
+                })
+                .on('mousemove', function() {
+                  // 更新tooltip位置随鼠标移动
+                  if (this._tooltip) {
+                    const mouseEvent = d3.event || window.event;
+                    const mouseX = mouseEvent ? mouseEvent.clientX : d3.mouse(document.body)[0];
+                    const mouseY = mouseEvent ? mouseEvent.clientY : d3.mouse(document.body)[1];
+                    
+                    this._tooltip.style.left = `${mouseX + 10}px`;
+                    this._tooltip.style.top = `${mouseY - 10}px`;
+                  }
                 })
                 .on('mouseout', function() {
                   // 恢复所有周数据线样式
@@ -1198,6 +1254,18 @@ const createLineChart = (data, container, allUserDataByWeek) => {
                     .attr('stroke-width', MATRIX_CHART.LINE_STYLES.WEEK_LINE_WIDTH)
                     .attr('stroke-opacity', MATRIX_CHART.OPACITY.WEEK_LINE_NORMAL)
                     .attr('filter', null);
+                  
+                  // 清除延迟显示定时器
+                  if (this._tooltipTimeout) {
+                    clearTimeout(this._tooltipTimeout);
+                    this._tooltipTimeout = null;
+                  }
+                  
+                  // 移除tooltip
+                  if (this._tooltip) {
+                    this._tooltip.remove();
+                    this._tooltip = null;
+                  }
                 })
                 .call(d3.drag()
                   .on('start', function(event, d) {
@@ -1587,8 +1655,8 @@ const resizeObserver = new ResizeObserver(() => {
   if (allUserData.value.length && lineChart.value) {
     createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
   }
-  if (originalData.value.length && overviewChart.value) {
-    createOverviewChart(originalData.value, overviewChart.value);
+  if (datasetStore.getEditedData.length && overviewChart.value) {
+    createOverviewChart(datasetStore.getEditedData, overviewChart.value);
   }
 });
 
@@ -1707,7 +1775,7 @@ watch(
         createLineChart(allUserData.value, lineChart.value, allUserDataByWeek.value);
       }
       if (overviewChart.value) {
-        createOverviewChart(originalData.value, overviewChart.value);
+        createOverviewChart(datasetStore.getEditedData, overviewChart.value);
       }
     }
   }
