@@ -8,6 +8,7 @@ import { useTimeSeriesStore } from '../stores/timeSeriesStore'
 import { ElMessage, ElScrollbar, ElSlider } from 'element-plus'
 import { getRandomColor, getColorByType } from '../utils/uiUtils'
 import { useDatasetStore } from '../stores/datasetStore'
+import { THEME_COLOR, THEME_COLOR_HOVER, THEME_COLOR_LIGHT } from '../utils/constants'
 
 const props = defineProps({
   series: Object,
@@ -46,6 +47,13 @@ watch(() => decomposedSeries.value, (newSeries) => {
 const toggleVisibility = () => {
   props.series.visible = !props.series.visible
   
+  // 如果当前序列变为不可见，取消其选中状态
+  if (!props.series.visible && props.isSelected) {
+    // 通知父组件或存储取消选中
+    store.clearSelection()
+    emit('click') // 通知父组件处理选中状态变化
+  }
+  
   // 如果当前是父系列且有子系列，切换父系列可见性时影响子系列
   if (props.series.visible && decomposedSeries.value.length > 0) {
     decomposedSeries.value.forEach(s => {
@@ -63,6 +71,14 @@ const toggleVisibility = () => {
 // 切换子系列的可见性
 const toggleChildVisibility = (childSeries) => {
   childSeries.visible = !childSeries.visible
+  
+  // 如果子序列变为不可见且当前被选中，取消选中
+  if (!childSeries.visible && store.selectedSeries.includes(childSeries.id)) {
+    store.setSelection(
+      store.selectedTimeRange, 
+      store.selectedSeries.filter(id => id !== childSeries.id)
+    )
+  }
   
   // 更新store中的系列或添加到store
   const seriesInStore = store.series.find(s => s.id === childSeries.id)
@@ -148,18 +164,28 @@ const toggleDecomposition = () => {
   
   // If child series exist, remove them and restore original
   if (existingChildSeries.length > 0) {
-    // Remove all child series from the store
+    // 保存原始序列的ID和数据，以便后续恢复
+    const originalSeriesId = props.series.id;
+    const originalSeriesData = JSON.parse(JSON.stringify(props.series.data));
+    
+    // 物理删除子序列以确保它们从UI中消失
     existingChildSeries.forEach(childSeries => {
       store.deleteSeries(childSeries.id);
     });
     
-    // Clear local decomposed series array
+    // 清空本地分解序列数组
     decomposedSeries.value = [];
     
-    // Make the original series visible again
+    // 确保原始序列可见
     props.series.visible = true;
     
-    // Show success message
+    // 重要：恢复原始序列数据，避免变成一条横线
+    const originalSeriesIndex = store.series.findIndex(s => s.id === originalSeriesId);
+    if (originalSeriesIndex !== -1) {
+      store.series[originalSeriesIndex].data = originalSeriesData;
+    }
+    
+    // 显示成功消息
     ElMessage.success('Decomposition components removed');
     
     return;
@@ -369,7 +395,11 @@ const getTypeDisplay = (type) => {
 <template>
   <div 
     class="time-series-item p-4 cursor-pointer transition-all duration-200 relative"
-    :class="{ 'bg-[#F5F2FE] border-l-4 border-[#8B5FFF]': isSelected }"
+    :class="{ 'border-l-4': isSelected }"
+    :style="isSelected ? {
+      backgroundColor: THEME_COLOR_LIGHT,
+      borderLeftColor: THEME_COLOR
+    } : {}"
     @click="handleClick"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
@@ -510,15 +540,17 @@ const getTypeDisplay = (type) => {
             <span class="text-sm font-semibold text-gray-600">Decomposition number:</span>
             <button 
               @click="isDecompNumberOpen = !isDecompNumberOpen"
-              style="color: #A15BFA; border-bottom: 2px solid #A15BFA; height: 26px; line-height: 26px;"
-              class="flex items-center justify-between min-w-[45px] hover:text-[#8B5FFF] transition-colors duration-200 ml-1"
+              :style="{ color: THEME_COLOR, borderBottomColor: THEME_COLOR }"
+              class="flex items-center justify-between min-w-[45px] transition-colors duration-200 ml-1"
+              :class="{ [`hover:text-[${THEME_COLOR_HOVER}]`]: true }"
             >
               <span class="text-sm font-semibold flex-1 text-center">{{ decompositionNumber }}</span>
               <!-- 下拉箭头 -->
               <svg 
-                class="h-4 w-4 transition-transform duration-200 flex-shrink-0 text-[#8B5FFF] ml-1"
+                class="h-4 w-4 transition-transform duration-200 flex-shrink-0 ml-1"
                 :class="{ 'rotate-180': isDecompNumberOpen }"
                 viewBox="0 0 20 20"
+                :style="{ color: THEME_COLOR }"
                 fill="currentColor"
               >
                 <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -534,7 +566,8 @@ const getTypeDisplay = (type) => {
                 decompositionNumber = num;
                 isDecompNumberOpen = false;
               }"
-              class="w-full px-3 py-1.5 text-center text-xs hover:text-[#8B5FFF] text-gray-700"
+              class="w-full px-3 py-1.5 text-center text-xs text-gray-700"
+              :class="{ [`hover:text-[${THEME_COLOR}]`]: true }"
             >
               {{ num }}
             </button>
@@ -547,15 +580,17 @@ const getTypeDisplay = (type) => {
             <span class="text-sm font-semibold text-gray-600">Model:</span>
             <button 
               @click="isModelOpen = !isModelOpen"
-              style="color: #A15BFA; border-bottom: 2px solid #A15BFA; height: 26px; line-height: 26px;"
-              class="flex items-center justify-between min-w-[80px] hover:text-[#8B5FFF] transition-colors duration-200 ml-2"
+              :style="{ color: THEME_COLOR, borderBottom: `2px solid ${THEME_COLOR}`, height: '26px', lineHeight: '26px' }"
+              class="flex items-center justify-between min-w-[80px] transition-colors duration-200 ml-2"
+              :class="{ [`hover:text-[${THEME_COLOR_HOVER}]`]: true }"
             >
               <span class="text-sm font-semibold flex-1 text-center">{{ model }}</span>
               <!-- 下拉箭头 -->
               <svg 
-                class="h-4 w-4 transition-transform duration-200 flex-shrink-0 text-[#8B5FFF] ml-1"
+                class="h-4 w-4 transition-transform duration-200 flex-shrink-0 ml-1"
                 :class="{ 'rotate-180': isModelOpen }"
                 viewBox="0 0 20 20"
+                :style="{ color: THEME_COLOR }"
                 fill="currentColor"
               >
                 <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -571,7 +606,8 @@ const getTypeDisplay = (type) => {
                 model = option;
                 isModelOpen = false;
               }"
-              class="w-full px-3 py-1.5 text-center text-xs hover:text-[#8B5FFF] text-gray-700"
+              class="w-full px-3 py-1.5 text-center text-xs text-gray-700"
+              :class="{ [`hover:text-[${THEME_COLOR}]`]: true }"
             >
               {{ option }}
             </button>
@@ -589,11 +625,16 @@ const getTypeDisplay = (type) => {
             :disabled="isDecomposing"
             class="compact-slider flex-1"
             :style="{
-              '--el-slider-main-bg-color': '#A15BFA',
-              '--el-color-primary': '#A15BFA'
+              '--el-slider-main-bg-color': THEME_COLOR_LIGHT,
+              '--el-color-primary': THEME_COLOR
             }"
           />
-          <span class="text-sm font-semibold text-[#8B5FFF] min-w-[20px] text-center ml-1">{{ level }}</span>
+          <span 
+            class="text-sm font-semibold min-w-[20px] text-center ml-1"
+            :style="{ color: THEME_COLOR }"
+          >
+            {{ level }}
+          </span>
         </div>
         
         <!-- 操作按钮 -->
@@ -615,7 +656,7 @@ const getTypeDisplay = (type) => {
           </button>
         </div>
       </div>
-      <div v-if="isDecomposing" class="text-xs text-[#8B5FFF] text-center mt-0.5">Processing...</div>
+      <div v-if="isDecomposing" class="text-xs text-center mt-0.5" :style="{ color: THEME_COLOR }">Processing...</div>
     </div>
 
     <!-- 子序列框直接显示在原序列下方 -->
@@ -626,7 +667,7 @@ const getTypeDisplay = (type) => {
 
 <style scoped>
 .time-series-tag {
-  font-size: 12px;
+  font-size: 14px;
   padding: 2px 8px;
   border-radius: 4px;
 }
@@ -637,33 +678,33 @@ const getTypeDisplay = (type) => {
 }
 
 .time-series-tag.lf {
-  background-color: #F5F1FF;
-  color: #8367F8;
+  background-color: v-bind('THEME_COLOR_LIGHT');
+  color: v-bind('THEME_COLOR');
 }
 
 .time-series-tag.mf {
   background-color: #F4ECFF;
-  color: #9B71F6;
+  color: v-bind('THEME_COLOR');
 }
 
 .time-series-tag.hf {
   background-color: #E9DFFF;
-  color: #6548C7;
+  color: v-bind('THEME_COLOR');
 }
 
 .time-series-tag.low_freq {
-  background-color: #F5F1FF;
-  color: #8367F8;
+  background-color: v-bind('THEME_COLOR_LIGHT');
+  color: v-bind('THEME_COLOR');
 }
 
 .time-series-tag.mid_freq {
   background-color: #F4ECFF;
-  color: #9B71F6;
+  color: v-bind('THEME_COLOR');
 }
 
 .time-series-tag.high_freq {
   background-color: #E9DFFF;
-  color: #6548C7;
+  color: v-bind('THEME_COLOR');
 }
 
 .time-series-item {
@@ -672,7 +713,8 @@ const getTypeDisplay = (type) => {
 }
 
 .time-series-item:hover {
-  background-color: #F9FAFB;
+  background-color: v-bind('THEME_COLOR_LIGHT');
+  opacity: 0.5;
 }
 
 /* 添加滚动条样式 */
@@ -692,13 +734,13 @@ const getTypeDisplay = (type) => {
 .compact-slider :deep(.el-slider__runway) {
   height: 6px;
   margin: 12px 0;
-  background-color: rgba(161, 91, 250, 0.1);
+  background-color: v-bind('THEME_COLOR_LIGHT');
   border-radius: 3px;
 }
 
 .compact-slider :deep(.el-slider__bar) {
   height: 6px;
-  background-color: var(--el-slider-main-bg-color, #A15BFA);
+  background-color: v-bind('THEME_COLOR');
   border-radius: 3px;
 }
 
@@ -711,7 +753,7 @@ const getTypeDisplay = (type) => {
 .compact-slider :deep(.el-slider__button) {
   width: 14px;
   height: 14px;
-  border: 2px solid var(--el-color-primary, #A15BFA);
+  border: 2px solid v-bind('THEME_COLOR');
   background-color: white;
 }
 
@@ -755,5 +797,11 @@ const getTypeDisplay = (type) => {
 .variable-z {
   background-color: #FEF3C7;
   color: #B45309;
+}
+
+/* 选中项的样式也可以使用v-bind */
+.time-series-item.selected {
+  background-color: v-bind('THEME_COLOR_LIGHT');
+  border-left-color: v-bind('THEME_COLOR');
 }
 </style>

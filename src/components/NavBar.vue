@@ -198,19 +198,21 @@
         </button>
       </el-tooltip>
 
-      <el-tooltip
-        content="Export"
-        placement="bottom"
-        :show-after="100"
-        :hide-after="0"
-      >
+      <!-- 修改导出按钮，添加下拉菜单 -->
+      <el-dropdown @command="handleExportCommand" trigger="click">
         <button
           class="w-10 h-10 rounded-lg flex items-center justify-center bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-all duration-200 hover:scale-105 hover:shadow-sm no-drag"
-          @click="exportEditHistory"
         >
           <img src="@/assets/export.svg" alt="Export" class="w-10 h-10 no-drag" />
         </button>
-      </el-tooltip>
+        
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="history">Export Edit History</el-dropdown-item>
+            <el-dropdown-item command="data">Export Edited Data</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
   </nav>
 </template>
@@ -221,6 +223,7 @@ import { BORDER_WIDTH, BORDER_COLOR, THEME_COLOR, WEEKDAY_COLOR, WEEKEND_COLOR }
 import { useDatasetStore } from '../stores/datasetStore';
 import { useTimeSeriesStore } from '../stores/timeSeriesStore';
 import { ElMessage } from 'element-plus';
+import { downloadCSV } from '../utils/csvUtils';
 
 const datasetStore = useDatasetStore();
 const timeSeriesStore = useTimeSeriesStore();
@@ -659,6 +662,113 @@ const exportEditHistory = () => {
   }, 100);
   
   ElMessage.success('export successfully');
+};
+
+// 添加处理导出命令的函数
+const handleExportCommand = (command) => {
+  if (command === 'history') {
+    exportEditHistory();
+  } else if (command === 'data') {
+    exportEditedData();
+  }
+};
+
+// 修改导出编辑数据的函数
+const exportEditedData = () => {
+  const editedData = datasetStore.getEditedData;
+  const dataset = datasetStore.getCurrentDataset;
+  
+  if (!editedData || editedData.length === 0) {
+    ElMessage.warning('No data to export');
+    return;
+  }
+  
+  // 将数据转换为CSV格式
+  let csvContent = [];
+  
+  // 根据数据集类型设置不同的CSV头
+  let headers;
+  if (dataset === 'capture') {
+    headers = ['Id', 'Time', 'x', 'y', 'z', 'annotation'];
+  } else {
+    headers = ['Id', 'Time', 'Value'];
+  }
+  csvContent.push(headers.join(','));
+  
+  // 添加数据行
+  editedData.forEach(user => {
+    // 创建一个映射，按时间组织数据点
+    const timeMap = {};
+    
+    user.data.forEach(point => {
+      // 确保有完整的时间格式 (日期 + 时间)
+      let fullTime = point.time;
+      if (!fullTime.includes(' ') && user.date) {
+        fullTime = `${user.date} ${point.time}`;
+      }
+      
+      // 初始化时间点数据
+      if (!timeMap[fullTime]) {
+        if (dataset === 'capture') {
+          timeMap[fullTime] = {
+            x: null,
+            y: null,
+            z: null,
+            annotation: point.annotation || ''
+          };
+        } else {
+          timeMap[fullTime] = {
+            value: point.value
+          };
+        }
+      }
+      
+      // capture数据集需要处理多个变量
+      if (dataset === 'capture') {
+        const variable = point.variable || datasetStore.selectedVariable;
+        if (variable && ['x', 'y', 'z'].includes(variable)) {
+          timeMap[fullTime][variable] = point.value;
+        }
+      }
+    });
+    
+    // 将数据点转换为CSV行
+    Object.entries(timeMap).forEach(([time, data]) => {
+      if (dataset === 'capture') {
+        csvContent.push([
+          user.id,
+          time,
+          data.x !== null ? data.x : '',
+          data.y !== null ? data.y : '',
+          data.z !== null ? data.z : '',
+          data.annotation || ''
+        ].join(','));
+      } else {
+        csvContent.push([
+          user.id,
+          time,
+          data.value
+        ].join(','));
+      }
+    });
+  });
+  
+  // 下载CSV文件
+  const blob = new Blob([csvContent.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `edited_data_${dataset}_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
+  
+  ElMessage.success('Data exported successfully');
 };
 </script> 
 

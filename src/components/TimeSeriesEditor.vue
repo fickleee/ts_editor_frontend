@@ -97,8 +97,6 @@ const selectTool = (toolId) => {
     if (toolId === 'expand' && selections.value.length > 0) {
       store.expandTimeSeries(selections.value)
     } else if (toolId === 'removal' && store.selectedTimeRange && selectedSeriesId.value) {
-      generatePatterns.value = store.findSimilarPatterns(selectedSeriesId.value)
-      
       // 获取数据集并输出到控制台
       const datasetStore = useDatasetStore()
       const fullDataset = datasetStore.getOriginalData
@@ -185,7 +183,15 @@ const selectTool = (toolId) => {
   }
 
   if (toolId === 'removal' && store.selectedTimeRange && selectedSeriesId.value) {
-    generatePatterns.value = store.findSimilarPatterns(selectedSeriesId.value)
+    // 先显示右侧面板，展示加载状态
+    isLoadingPatterns.value = true
+    generatePatterns.value = [] // 清空之前的结果
+    
+    // 使用异步操作计算匹配模式
+    setTimeout(() => {
+      generatePatterns.value = store.findSimilarPatterns(selectedSeriesId.value)
+      isLoadingPatterns.value = false
+    }, 50) // 小延迟让界面有时间更新
   }
 }
 
@@ -531,6 +537,13 @@ const handleCurveApply = () => {
   }
   
   previewCurve.value = null
+  
+  // 应用后关闭工具
+  activeTool.value = null
+  tools.value.forEach(tool => tool.active = false)
+  
+  // 成功消息反馈
+  ElMessage.success('Curve applied successfully')
 }
 
 const handleCurveReset = () => {
@@ -1010,6 +1023,9 @@ const getSimilarityColor = (similarity) => {
   if (similarity >= 0.7) return THEME_COLOR_HOVER; // 浅紫色 - 中等相似度
   return '#B69FFF'; // 更浅的紫色 - 低相似度
 }
+
+// 添加loading状态变量
+const isLoadingPatterns = ref(false)
 </script>
 
 <template>
@@ -1030,7 +1046,7 @@ const getSimilarityColor = (similarity) => {
                 @click="selectTool(tool.id)"
                 class="w-[48px] h-[48px] flex items-center justify-center rounded-lg transition-all duration-200 shadow-sm"
                 :class="{
-                  'bg-purple-100 text-[#8B5FFF] shadow-md scale-105': tool.active,
+                  [`bg-purple-100 text-[${THEME_COLOR}] shadow-md scale-105`]: tool.active,
                   'text-gray-500 hover:bg-gray-50 hover:scale-105 hover:shadow': !tool.active,
                   'opacity-50 cursor-not-allowed': selectionPending
                 }"
@@ -1042,7 +1058,8 @@ const getSimilarityColor = (similarity) => {
               
               <!-- 只在第1个和第3个按钮后添加分隔线 -->
               <div v-if="index === 1 || index === 3" 
-                   class="w-[24px] h-0 border-b border-[#8B5FFF] my-2">
+                   class="w-[24px] h-0 border-b my-2"
+                   :style="{ borderColor: THEME_COLOR }">
               </div>
             </template>
           </div>
@@ -1162,7 +1179,13 @@ const getSimilarityColor = (similarity) => {
             <template v-if="activeTool === 'removal'">
               <div class="h-full flex flex-col overflow-hidden">               
                 <el-scrollbar class="flex-1 p-6">
-                  <div v-if="generatePatterns.length === 0" class="text-center py-8 text-gray-500">
+                  <!-- 添加加载状态 -->
+                  <div v-if="isLoadingPatterns" class="flex flex-col items-center justify-center py-8">
+                    <div class="loading-spinner mb-2"></div>
+                    <div class="text-center text-[#8367F8]">Processing...</div>
+                  </div>
+                  
+                  <div v-else-if="generatePatterns.length === 0" class="text-center py-8 text-gray-500">
                     Please select one time series to removal
                   </div>
                   
@@ -1414,5 +1437,20 @@ const getSimilarityColor = (similarity) => {
 
 :deep(.el-scrollbar__bar.is-horizontal) {
   height: 6px;
+}
+
+/* 加载动画 */
+.loading-spinner {
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(131, 103, 248, 0.2);
+  border-radius: 50%;
+  border-top-color: #8367F8;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
