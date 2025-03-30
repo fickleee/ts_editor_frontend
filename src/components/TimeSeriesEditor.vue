@@ -615,10 +615,6 @@ const handleDragStart = (point) => {
   }
 }
 
-const mouseReleasePosition = ref(null)
-const showSelectionButtons = ref(false)
-
-// 修改handleDragEnd函数，记录鼠标位置
 const handleDragEnd = (event) => {
   isDragging.value = false
   dragStartPoint.value = null
@@ -634,7 +630,6 @@ const handleDragEnd = (event) => {
   }
   
   if (selectionPending.value) {
-    // 获取鼠标在图表上的位置
     const chartRect = event.target.getBoundingClientRect()
     mouseReleasePosition.value = {
       x: event.clientX - chartRect.left,
@@ -664,20 +659,6 @@ const handleDragEnd = (event) => {
   }
 }
 
-// 添加处理按钮点击的函数
-const handleSelectionConfirm = () => {
-  handleSelectionComplete()
-  showSelectionButtons.value = false
-  mouseReleasePosition.value = null
-}
-
-const handleSelectionCancel = () => {
-  selectionPending.value = false
-  store.clearSelection()
-  showSelectionButtons.value = false
-  mouseReleasePosition.value = null
-}
-
 const handleSeriesClick = (seriesId) => {
   const seriesObj = store.series.find(s => s.id === seriesId);
   
@@ -686,7 +667,25 @@ const handleSeriesClick = (seriesId) => {
     return;
   }
   
+  // 如果当前序列已经被选中，则取消选择
+  if (selectedSeriesId.value === seriesId) {
+    selectedSeriesId.value = null;
+    // 如果store中有选中的时间范围，只清除选中的系列而保留时间范围
+    if (store.selectedTimeRange) {
+      store.setSelection(store.selectedTimeRange, []);
+    } else {
+      store.clearSelection();
+    }
+    return;
+  }
+  
+  // 否则，选择新的序列
   selectedSeriesId.value = seriesId;
+  
+  // 如果有选中的时间范围，更新store中的选中系列
+  if (store.selectedTimeRange) {
+    store.setSelection(store.selectedTimeRange, [seriesId]);
+  }
 }
 
 const handleSeriesHover = (seriesId, isHovering) => {
@@ -698,6 +697,39 @@ const formatTime = (time) => {
   const minutes = Math.floor((time - hours) * 60)
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
 }
+
+const confirmSelection = () => {
+  selectionPending.value = false
+  
+  if (store.selectedTimeRange) {
+    const { start, end } = store.selectedTimeRange
+    if (Math.abs(end - start) < 0.1) {
+      store.setSelection({
+        start,
+        end: start + 0.1
+      }, store.selectedSeries)
+    }
+  }
+  
+  ElMessage.success('Selection confirmed')
+}
+
+const cancelSelection = () => {
+  store.clearSelection()
+  selectionPending.value = false
+  showSelectionButtons.value = false
+  dragStartTime.value = null
+  dragStartValue.value = null
+  ElMessage.info('Selection cancelled')
+}
+
+const applySelection = () => {
+  selectionPending.value = false
+  showSelectionButtons.value = false
+}
+
+const mouseReleasePosition = ref(null)
+const showSelectionButtons = ref(false)
 
 // 组织序列以支持父子关系显示
 const organizedSeries = computed(() => {
@@ -1069,56 +1101,53 @@ const isLoadingPatterns = ref(false)
           <!-- Main content -->
           <div class="flex-1 flex flex-col overflow-hidden">
             <div class="flex-1 px-6 pt-2 pb-4">
-              <div class="relative flex-1">
-                <TimeSeriesChart
-                  ref="chartRef"
-                  :series="[...store.series, ...(store.previewSeries ? [store.previewSeries] : [])]"
-                  :height="null"
-                  :showGrid="true"
-                  :selection="store.selectedTimeRange"
-                  :multiSelect="isMultiSelect"
-                  :activeTool="activeTool"
-                  :isMainChart="true"
-                  :hoveredSeriesId="hoveredSeriesId"
-                  :selectedSeriesId="selectedSeriesId"
-                  :selectedSeries="store.selectedSeries"
-                  :timeAxisConfig="timeAxisConfig"
-                  :cloneHighlightArea="cloneHighlightArea"
-                  @click="handleChartClick"
-                  @drag="handleChartDrag"
-                  @dragStart="handleDragStart"
-                  @dragEnd="handleDragEnd"
-                  @selectionComplete="handleSelectionComplete"
-                  @seriesClick="handleSeriesClick"
-                  @hover="handleChartHover"
-                />
-                
-                <!-- 选择确认/取消按钮 -->
-                <div 
-                  v-if="showSelectionButtons && mouseReleasePosition" 
-                  class="absolute flex flex-col gap-2"
-                  :style="{
-                    top: `${mouseReleasePosition.y - 40}px`,
-                    left: `${mouseReleasePosition.x + 10}px`
-                  }"
-                >
-                  <button
-                    @click="handleSelectionConfirm"
-                    class="p-0.5 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-green-300 shadow-sm"
-                    title="Confirm"
-                  >
-                    <img src="/src/assets/apply.svg" alt="Confirm" class="w-5 h-5" />
-                  </button>
-                  
-                  <button
-                    @click="handleSelectionCancel"
-                    class="p-0.5 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-red-300 shadow-sm"
-                    title="Cancel"
-                  >
-                    <img src="/src/assets/cancel.svg" alt="Cancel" class="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
+              <TimeSeriesChart
+                ref="chartRef"
+                :series="[...store.series, ...(store.previewSeries ? [store.previewSeries] : [])]"
+                :height="null"
+                :showGrid="true"
+                :selection="store.selectedTimeRange"
+                :multiSelect="isMultiSelect"
+                :activeTool="activeTool"
+                :isMainChart="true"
+                :hoveredSeriesId="hoveredSeriesId"
+                :selectedSeriesId="selectedSeriesId"
+                :selectedSeries="store.selectedSeries"
+                :timeAxisConfig="timeAxisConfig"
+                :cloneHighlightArea="cloneHighlightArea"
+                @click="handleChartClick"
+                @drag="handleChartDrag"
+                @dragStart="handleDragStart"
+                @dragEnd="handleDragEnd"
+                @selectionComplete="handleSelectionComplete"
+                @seriesClick="handleSeriesClick"
+                @hover="handleChartHover"
+              />
+            </div>
+            
+            <!-- 选择确认/取消按钮 -->
+            <div 
+              v-if="showSelectionButtons && mouseReleasePosition" 
+              class="absolute flex flex-col gap-2"
+              :style="{
+                left: `${mouseReleasePosition.x + 10}px`,
+                top: `${mouseReleasePosition.y - 40}px` 
+              }"
+            >
+              <button 
+                @click="applySelection" 
+                class="p-1 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-green-300" 
+                title="Apply"
+              >
+                <img src="/src/assets/apply.svg" alt="Apply" class="w-5 h-5" />
+              </button>
+              <button 
+                @click="cancelSelection" 
+                class="p-1 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-red-300" 
+                title="Cancel"
+              >
+                <img src="/src/assets/cancel.svg" alt="Cancel" class="w-5 h-5" />
+              </button>
             </div>
           </div>
 

@@ -50,6 +50,14 @@ const props = defineProps({
   isSelected: {
     type: Boolean,
     default: false
+  },
+  showConfirmButtons: {
+    type: Boolean,
+    default: false
+  },
+  confirmButtonsPos: {
+    type: Object,
+    default: () => ({ x: 0, y: 0 })
   }
 })
 
@@ -825,10 +833,44 @@ onMounted(() => {
     observer.observe(chartRef.value)
   }
 })
+
+const handleConfirmSelection = () => {
+  // Implementation of handleConfirmSelection
+}
+
+const handleCancelSelection = () => {
+  // Implementation of handleCancelSelection
+}
 </script>
 
 <template>
-  <div ref="chartRef" class="w-full h-full bg-white"></div>
+  <div ref="chartRef" class="w-full h-full bg-white relative">
+    <!-- 添加确认/取消按钮 -->
+    <div 
+      v-if="showConfirmButtons"
+      class="absolute flex flex-col gap-2 z-10"
+      :style="{
+        top: `${confirmButtonsPos.y}px`,
+        left: `${confirmButtonsPos.x}px`
+      }"
+    >
+      <button
+        @click="handleConfirmSelection"
+        class="p-1 rounded-full border border-gray-200 bg-white flex items-center justify-center w-8 h-8 hover:border-green-300 shadow-sm"
+        title="Confirm"
+      >
+        <img src="/src/assets/apply.svg" alt="Confirm" class="w-6 h-6" />
+      </button>
+      
+      <button
+        @click="handleCancelSelection"
+        class="p-1 rounded-full border border-gray-200 bg-white flex items-center justify-center w-8 h-8 hover:border-red-300 shadow-sm"
+        title="Cancel"
+      >
+        <img src="/src/assets/cancel.svg" alt="Cancel" class="w-6 h-6" />
+      </button>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -884,6 +926,10 @@ onMounted(() => {
 }
 
 .clone-highlight {
+  pointer-events: none;
+}
+
+.temp-selection {
   pointer-events: none;
 }
 </style>
