@@ -117,9 +117,22 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     operationIndex.value = operations.value.length - 1
   }
 
-  const setSelection = (timeRange, seriesIds) => {
-    selectedTimeRange.value = timeRange
-    selectedSeries.value = seriesIds
+  const setSelection = (range, seriesIds) => {
+    if (!range) {
+      selectedTimeRange.value = null
+      selectedSeries.value = []
+      return
+    }
+    
+    selectedTimeRange.value = range
+    
+    // 过滤掉不可见的序列
+    const visibleSeriesIds = seriesIds.filter(id => {
+      const seriesObj = series.value.find(s => s.id === id);
+      return seriesObj && seriesObj.visible;
+    });
+    
+    selectedSeries.value = visibleSeriesIds
   }
 
   const clearSelection = () => {
@@ -158,22 +171,23 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
   }
 
   const moveSeries = (seriesId, offset) => {
-    if (!selectedTimeRange.value) return
-
     const seriesIndex = series.value.findIndex(s => s.id === seriesId)
     if (seriesIndex === -1) return
 
-    // Get current dataset type to check if we should prevent negative values
-    const datasetStore = useDatasetStore();
-    const currentDataset = datasetStore.getCurrentDataset;
-    const preventNegative = currentDataset === 'step' || currentDataset === 'electricity';
+    const currentSeries = series.value[seriesIndex]
+    
+    // 如果序列不可见，则不进行任何操作
+    if (!currentSeries.visible) {
+      return;
+    }
+    
+    if (!selectedTimeRange.value) return
 
     const beforeData = getSeriesSnapshot([seriesId])
     
     const operationType = offset.x !== 0 && offset.y === 0 ? 'move-x' : 
                          offset.x === 0 && offset.y !== 0 ? 'move-y' : 'move-xy'
 
-    const currentSeries = series.value[seriesIndex]
     const { start, end } = selectedTimeRange.value
 
     const hasChildren = series.value.some(s => s.parentId === seriesId)

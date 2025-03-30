@@ -114,7 +114,11 @@ const getTypeClass = (type) => {
 }
 
 const handleClick = () => {
-  emit('click')
+  // 如果序列不可见，则不触发点击事件
+  if (!props.series.visible) {
+    return;
+  }
+  emit('click');
 }
 
 const handleMouseEnter = () => {
@@ -395,7 +399,10 @@ const getTypeDisplay = (type) => {
 <template>
   <div 
     class="time-series-item p-4 cursor-pointer transition-all duration-200 relative"
-    :class="{ 'border-l-4': isSelected }"
+    :class="{ 
+      'border-l-4': isSelected,
+      'cursor-not-allowed opacity-75': !series.visible // 降低透明度，从50%调整为75%
+    }"
     :style="isSelected ? {
       backgroundColor: THEME_COLOR_LIGHT,
       borderLeftColor: THEME_COLOR
@@ -714,7 +721,7 @@ const getTypeDisplay = (type) => {
 
 .time-series-item:hover {
   background-color: v-bind('THEME_COLOR_LIGHT');
-  opacity: 0.5;
+  opacity: 0.85;
 }
 
 /* 添加滚动条样式 */
@@ -803,5 +810,11 @@ const getTypeDisplay = (type) => {
 .time-series-item.selected {
   background-color: v-bind('THEME_COLOR_LIGHT');
   border-left-color: v-bind('THEME_COLOR');
+}
+
+/* 为不可见序列添加特殊的hover样式 */
+.time-series-item.cursor-not-allowed:hover {
+  background-color: v-bind('THEME_COLOR_LIGHT');
+  opacity: 0.85;
 }
 </style>

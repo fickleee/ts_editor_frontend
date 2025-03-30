@@ -177,6 +177,21 @@ const selectTool = (toolId) => {
 
   if (toolId === 'expand') {
     isMultiSelect.value = true
+    // 如果已存在选择范围，将其添加到selections中，但只包含可见序列
+    if (store.selectedTimeRange) {
+      const visibleIds = store.selectedSeries.filter(id => {
+        const seriesObj = store.series.find(s => s.id === id);
+        return seriesObj && seriesObj.visible;
+      });
+      
+      if (visibleIds.length > 0 && 
+          !selections.value.some(s => s.start === store.selectedTimeRange.start && s.end === store.selectedTimeRange.end)) {
+        selections.value.push({
+          ...store.selectedTimeRange,
+          seriesIds: visibleIds
+        });
+      }
+    }
   } else {
     isMultiSelect.value = false
     selections.value = []
@@ -645,16 +660,14 @@ const handleDragEnd = (event) => {
 }
 
 const handleSeriesClick = (seriesId) => {
-  if (selectedSeriesId.value === seriesId) {
-    selectedSeriesId.value = null
-    store.clearSelection()
-  } else {
-    selectedSeriesId.value = seriesId
-    
-    if (store.selectedTimeRange) {
-      store.setSelection(store.selectedTimeRange, [seriesId])
-    }
+  const seriesObj = store.series.find(s => s.id === seriesId);
+  
+  // 如果序列不可见，则不能选择
+  if (seriesObj && !seriesObj.visible) {
+    return;
   }
+  
+  selectedSeriesId.value = seriesId;
 }
 
 const handleSeriesHover = (seriesId, isHovering) => {
@@ -1178,70 +1191,69 @@ const isLoadingPatterns = ref(false)
 
             <template v-if="activeTool === 'removal'">
               <div class="h-full flex flex-col overflow-hidden">               
-                <el-scrollbar class="flex-1 p-6">
-                  <!-- 添加加载状态 -->
-                  <div v-if="isLoadingPatterns" class="flex flex-col items-center justify-center py-8">
-                    <div class="loading-spinner mb-2"></div>
-                    <div class="text-center text-[#8367F8]">Processing...</div>
-                  </div>
-                  
-                  <div v-else-if="generatePatterns.length === 0" class="text-center py-8 text-gray-500">
-                    Please select one time series to removal
-                  </div>
-                  
-                  <div v-else class="space-y-4">
-                    <div 
-                      v-for="pattern in generatePatterns" 
-                      :key="`${pattern.start}-${pattern.end}`"
-                      class="border rounded-lg p-4 cursor-pointer transition-all duration-200"
-                      :class="{
-                        'border-[#8367F8] bg-[#8367F8]/10': selectedPattern === pattern,
-                        'border-gray-200 hover:border-[#8367F8]': selectedPattern !== pattern
-                      }"
-                      @click="handleGenerateSelect(pattern)"
-                    >
-                      <div class="flex justify-between items-center mb-2">
-                        <div class="text-sm text-gray-600">
-                          <span class="mr-2">Source: {{ pattern.sourceName }}</span>
+                <el-scrollbar class="flex-1 overflow-hidden">
+                  <div class="p-4">
+                    <!-- 添加加载状态 -->
+                    <div v-if="isLoadingPatterns" class="flex flex-col items-center justify-center py-8">
+                      <div class="loading-spinner mb-2"></div>
+                      <div class="text-center text-[#8367F8]">Processing...</div>
+                    </div>
+                    
+                    <div v-else-if="generatePatterns.length === 0" class="text-center py-8 text-gray-500">
+                      Please select one time series to removal
+                    </div>
+                    
+                    <div v-else class="space-y-4">
+                      <div 
+                        v-for="pattern in generatePatterns" 
+                        :key="`${pattern.start}-${pattern.end}`"
+                        class="border rounded-lg p-4 cursor-pointer transition-all duration-200"
+                        :class="{
+                          'border-[#8367F8] bg-[#8367F8]/10': selectedPattern === pattern,
+                          'border-gray-200 hover:border-[#8367F8]': selectedPattern !== pattern
+                        }"
+                        @click="handleGenerateSelect(pattern)"
+                      >
+                        <div class="flex justify-between items-center mb-2">
+                          <div class="text-sm text-gray-600">
+                            <span class="mr-2">Source: {{ pattern.sourceName }}</span>
+                          </div>
+                          <div class="text-sm font-semibold" 
+                               :style="{ color: getSimilarityColor(pattern.similarity) }">
+                            Similarity: {{ (pattern.similarity * 100).toFixed(1) }}%
+                          </div>
                         </div>
-                        <div class="text-sm font-semibold" 
-                             :style="{ color: getSimilarityColor(pattern.similarity) }">
-                          Similarity: {{ (pattern.similarity * 100).toFixed(1) }}%
+                        <div class="text-sm text-gray-600 mb-2">
+                          Time range: {{ formatTime(pattern.start) }} - {{ formatTime(pattern.end) }}
                         </div>
-                      </div>
-                      <div class="text-sm text-gray-600 mb-2">
-                        Time range: {{ formatTime(pattern.start) }} - {{ formatTime(pattern.end) }}
-                      </div>
-                      <div class="h-[90px]">
-                        <PatternChart
-                          :pattern="pattern"
-                          :height="90"
-                        />
+                        <div class="h-[90px]">
+                          <PatternChart
+                            :pattern="pattern"
+                            :height="90"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
                 </el-scrollbar>
                 
-                <div class="flex-none p-6 border-t border-gray-200">
-                  <div class="flex justify-end gap-2">
-                    <button
-                      @click="handleGenerateReset"
-                      class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                    >
-                      Reset
-                    </button>
-                    <button
-                      @click="handleGenerateApply"
-                      class="px-4 py-2 rounded hover:opacity-90"
-                      :style="{
-                        backgroundColor: THEME_COLOR,
-                        color: 'white'
-                      }"
-                      :disabled="!selectedPattern"
-                    >
-                      Apply
-                    </button>
-                  </div>
+                <div class="flex-none border-t border-gray-200 p-2 flex justify-end gap-2">
+                  <button
+                    @click="handleGenerateReset"
+                    class="p-0.5 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-red-300"
+                    title="Cancel"
+                  >
+                    <img src="/src/assets/cancel.svg" alt="Cancel" class="w-5 h-5" />
+                  </button>
+                  
+                  <button
+                    @click="handleGenerateApply"
+                    class="p-0.5 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-green-300"
+                    :disabled="!selectedPattern"
+                    title="Apply"
+                  >
+                    <img src="/src/assets/apply.svg" alt="Apply" class="w-5 h-5" />
+                  </button>
                 </div>
               </div>
             </template>
