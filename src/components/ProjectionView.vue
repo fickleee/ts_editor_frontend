@@ -556,7 +556,7 @@ const createScatterPlot = (data) => {
       ctx.font = `${Math.min(12, radius * t.k)}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(nearestCenter.clusterId, xScale.value(nearestCenter.x), yScale.value(nearestCenter.y));
+      // ctx.fillText(nearestCenter.clusterId, xScale.value(nearestCenter.x), yScale.value(nearestCenter.y));
       
       // 从allPoints中查找并显示属于该簇的点
       allPoints.value.forEach(user => {

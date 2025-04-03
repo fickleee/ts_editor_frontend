@@ -5,22 +5,33 @@
       v-if="datasetStore.getCurrentDataset && data.length > 0 && !isLoading" 
       class="absolute top-2 left-2 z-40"
     >
-      <div class="flex bg-gray-100 p-0.5 rounded-full shadow-sm">
+      <div class="flex items-center gap-2">
+        <div class="flex bg-gray-100 p-0.5 rounded-full shadow-sm">
+          <button
+            v-for="option in layoutOptions"
+            :key="option.value"
+            @click="switchLayout(option.value)"
+            :style="{
+              '--text-color': THEME_COLOR
+            }"
+            class="px-2 py-1 text-xs font-semibold rounded-full transition-colors duration-200"
+            :class="[
+              useOptimizedLayout === option.value
+                ? 'bg-white text-[var(--text-color)] shadow-sm'
+                : 'text-gray-600 hover:text-[var(--text-color)]'
+            ]"
+          >
+            {{ option.label }}
+          </button>
+        </div>
         <button
-          v-for="option in layoutOptions"
-          :key="option.value"
-          @click="switchLayout(option.value)"
+          @click="toggleReverse"
           :style="{
             '--text-color': THEME_COLOR
           }"
-          class="px-2 py-1 text-xs font-semibold rounded-full transition-colors duration-200"
-          :class="[
-            useOptimizedLayout === option.value
-              ? 'bg-white text-[var(--text-color)] shadow-sm'
-              : 'text-gray-600 hover:text-[var(--text-color)]'
-          ]"
+          class="px-2 py-1 text-xs font-semibold rounded-full transition-colors duration-200 bg-gray-100 hover:bg-white text-gray-600 hover:text-[var(--text-color)] shadow-sm"
         >
-          {{ option.label }}
+          Revert
         </button>
       </div>
     </div>
@@ -87,7 +98,7 @@ import { THEME_COLOR, THEME_COLOR_LIGHT, WEEKDAY_COLOR, WEEKEND_COLOR } from '@/
 import { useDatasetStore } from '../stores/datasetStore';
 import { generateGradientColors } from '@/utils/generateColor';
 import { optimizeRadialLayoutCorrect, optimizeRadialLayout } from '@/utils/radialLayout'; // 使用新的优化布局函数
-
+import { generateMultipleTimeSeriesData } from '@/utils/generateDataForFig'
 const datasetStore = useDatasetStore();
 
 const chartContainer = ref(null);
@@ -99,6 +110,9 @@ const fixedHighlightRingIndex = ref(null);
 
 // 添加状态用于控制是否使用优化布局
 const useOptimizedLayout = ref(true);
+
+// 添加排序方向状态
+const isReversed = ref(false);
 
 // 滑块相关状态
 const minValue = ref(0);
@@ -114,10 +128,11 @@ const updateSliderWidth = () => {
   if (!chartContainer.value) return;
   
   const containerWidth = chartContainer.value.clientWidth;
+  console.log(containerWidth);
   
   // 根据容器宽度动态调整，增加各个尺寸下的宽度比例
   if (containerWidth < 600) {
-    sliderWidth.value = Math.max(containerWidth * 0.55, 180); // 小屏幕，增加比例和最小宽度
+    sliderWidth.value = Math.max(containerWidth * 0.5, 180); // 小屏幕，增加比例和最小宽度
   } else if (containerWidth < 1200) {
     sliderWidth.value = Math.max(containerWidth * 0.4, 240); // 中等屏幕
   } else if (containerWidth < 1600) {
@@ -234,11 +249,15 @@ const createConcentricDonuts = (rawData, container) => {
     console.warn('No data received');
     return;
   }
+  // rawData = generateMultipleTimeSeriesData(5)
   
   // 使用优化布局算法重新排序数据
-  const processedData = useOptimizedLayout.value ? optimizeRadialLayout(rawData) : rawData;
+  let processedData = useOptimizedLayout.value ? optimizeRadialLayout(rawData) : rawData;
   // // 使用新的优化布局算法重新排序数据
   // const processedData = useOptimizedLayout.value ? optimizeRadialLayoutCorrect(rawData) : rawData;
+  
+  // 是否逆序
+  processedData = isReversed.value ? [...processedData].reverse() : processedData;
   // 清除已有的图表
   d3.select(container).selectAll('svg').remove();
 
@@ -666,12 +685,14 @@ watch([
     return
   }
   data.value = aggregateDataForRadialView(datasetStore.getEditedData);
+  // data.value = generateMultipleTimeSeriesData(5)
   updateSliderRange();
 });
 
 watch(() => datasetStore.getEditedData, (newData) => {
   if (newData) {
     data.value = aggregateDataForRadialView(newData);
+    // data.value = generateMultipleTimeSeriesData(5)
     updateSliderRange();
     createConcentricDonuts(data.value, chartContainer.value);
   }
@@ -772,6 +793,15 @@ function handleOptimizationToggle() {
     });
   }
 }
+
+// 添加 toggleReverse 方法
+const toggleReverse = () => {
+  isReversed.value = !isReversed.value;
+  if (data.value.length && chartContainer.value) {
+    // const displayData = isReversed.value ? [...data.value].reverse() : data.value;
+    createConcentricDonuts(data.value, chartContainer.value);
+  }
+};
 
 </script>
 
