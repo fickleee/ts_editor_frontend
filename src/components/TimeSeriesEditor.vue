@@ -184,12 +184,26 @@ const selectTool = (toolId) => {
         return seriesObj && seriesObj.visible;
       });
       
-      if (visibleIds.length > 0 && 
-          !selections.value.some(s => s.start === store.selectedTimeRange.start && s.end === store.selectedTimeRange.end)) {
-        selections.value.push({
-          ...store.selectedTimeRange,
-          seriesIds: visibleIds
-        });
+      // 无论是否已存在相同区间，都添加当前选择
+      if (visibleIds.length > 0) {
+        // 检查是否已存在相同区间
+        const existingSameRange = selections.value.findIndex(s => 
+          s.start === store.selectedTimeRange.start && 
+          s.end === store.selectedTimeRange.end
+        );
+        
+        // 如果已存在相同区间，更新它；否则添加新区间
+        if (existingSameRange >= 0) {
+          selections.value[existingSameRange] = {
+            ...store.selectedTimeRange,
+            seriesIds: visibleIds
+          };
+        } else {
+          selections.value.push({
+            ...store.selectedTimeRange,
+            seriesIds: visibleIds
+          });
+        }
       }
     }
   } else {
@@ -483,7 +497,23 @@ const handleChartDrag = (timeRange, valueRange, dragPoint) => {
 }
 
 const handleSelectionComplete = (newSelections) => {
-  selections.value = newSelections
+  // 确保不会丢失旧的选择
+  if (isMultiSelect.value && activeTool.value === 'expand') {
+    // 合并新选择和现有选择，避免重复
+    newSelections.forEach(newSel => {
+      const existingIndex = selections.value.findIndex(s => 
+        s.start === newSel.start && s.end === newSel.end
+      );
+      
+      if (existingIndex >= 0) {
+        selections.value[existingIndex] = newSel;
+      } else {
+        selections.value.push(newSel);
+      }
+    });
+  } else {
+    selections.value = newSelections;
+  }
 }
 
 const handleCurveChange = (curve) => {
@@ -576,26 +606,28 @@ const handleGenerateSelect = (pattern) => {
 
 const handleGenerateApply = () => {
   if (!selectedPattern.value || !selectedSeriesId.value) {
-    ElMessage.warning('Please select a pattern first')
-    return
+    return;
   }
   
-  // 应用模式前记录状态
-  const beforeState = store.getSeriesSnapshot([selectedSeriesId.value])
+  // 执行替换
+  store.replaceWithPattern(
+    selectedSeriesId.value, 
+    selectedPattern.value, 
+    store.selectedTimeRange
+  );
   
-  // 应用替换操作
-  store.replaceWithPattern(selectedPattern.value, selectedSeriesId.value)
+  // 操作完成后，重置状态
+  selectedPattern.value = null;
   
-  // 记录操作完成，提供清晰的反馈
-  ElMessage.success(`Pattern from user ${selectedPattern.value.userId} applied successfully`)
+  // 清空候选项列表
+  generatePatterns.value = [];
   
-  // 清除选择和预览
-  selectedPattern.value = null
-  store.clearPreviewSeries()
+  // 重置工具状态
+  activeTool.value = null;
+  tools.value.forEach(tool => tool.active = false);
   
-  // 关闭工具
-  activeTool.value = null
-  tools.value.forEach(tool => tool.active = false)
+  // 提示用户操作成功
+  ElMessage.success('Pattern applied successfully');
 }
 
 const handleGenerateReset = () => {
@@ -630,11 +662,33 @@ const handleDragEnd = (event) => {
   }
   
   if (selectionPending.value) {
+    // 获取图表的DOM元素和边界
     const chartRect = event.target.getBoundingClientRect()
-    mouseReleasePosition.value = {
-      x: event.clientX - chartRect.left,
-      y: event.clientY - chartRect.top
+    
+    // 计算选择区域的右边界在屏幕上的位置
+    const rightEdgePosition = { x: 0, y: event.clientY - chartRect.top }
+    
+    if (store.selectedTimeRange) {
+      // 计算图表的X轴比例
+      const chartWidth = chartRect.width - 65 // 减去左侧边距
+      const xScale = chartWidth / 24 // 假设时间轴是24小时
+      
+      // 计算选择范围的右边界
+      const rightEdgeTime = store.selectedTimeRange.end
+      
+      // 转换为像素位置
+      rightEdgePosition.x = 65 + (rightEdgeTime * xScale) // 加上左侧边距
+    } else if (event.clientX) {
+      // 如果没有选择范围，使用鼠标释放的位置
+      rightEdgePosition.x = event.clientX - chartRect.left
     }
+    
+    // 设置按钮位置，略微偏右
+    mouseReleasePosition.value = {
+      x: rightEdgePosition.x + 55, // 在右边界右侧10px
+      y: rightEdgePosition.y - 15  // 垂直居中
+    }
+    
     showSelectionButtons.value = true
   }
 

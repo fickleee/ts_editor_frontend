@@ -405,7 +405,16 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
     
     const beforeData = getSeriesSnapshot(selectedSeries.value);
     
-    const totalSelectedTime = selections.reduce((sum, sel) => sum + (sel.end - sel.start), 0);
+    // 确保选择区间不重复
+    const uniqueSelections = [];
+    selections.forEach(sel => {
+      if (!uniqueSelections.some(s => s.start === sel.start && s.end === sel.end)) {
+        uniqueSelections.push(sel);
+      }
+    });
+    
+    // 计算选择的总时间
+    const totalSelectedTime = uniqueSelections.reduce((sum, sel) => sum + (sel.end - sel.start), 0);
     const scaleFactor = 24 / totalSelectedTime;
     
     selectedSeries.value.forEach(id => {
@@ -442,7 +451,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
         return interpolate(time, points[i - 1], points[i]);
       };
       
-      selections.forEach((selection, index) => {
+      uniqueSelections.forEach((selection, index) => {
         const segmentData = originalData.filter(
           point => point && !isNaN(point.time) && !isNaN(point.value) &&
                   point.time >= selection.start && point.time <= selection.end

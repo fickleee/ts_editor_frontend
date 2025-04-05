@@ -471,6 +471,27 @@ const initChart = () => {
         .attr('stroke', 'rgb(147, 51, 234)')
         .attr('stroke-width', 1)
     })
+    
+    // 添加以下代码：当在多选模式且已有选择时，也高亮显示当前选择区域
+    if (props.selection) {
+      // 检查当前选择是否已在selections中
+      const isAlreadyInSelections = selections.value.some(
+        s => s.start === props.selection.start && s.end === props.selection.end
+      );
+      
+      // 如果不在，也以相同样式显示它
+      if (!isAlreadyInSelections) {
+        g.append('rect')
+          .attr('class', 'selection')
+          .attr('x', xScale(props.selection.start))
+          .attr('y', 0)
+          .attr('width', xScale(props.selection.end) - xScale(props.selection.start))
+          .attr('height', height)
+          .attr('fill', 'rgba(147, 51, 234, 0.2)')
+          .attr('stroke', 'rgb(147, 51, 234)')
+          .attr('stroke-width', 1)
+      }
+    }
   } else if (props.selection) {
     g.append('rect')
       .attr('class', 'selection')
@@ -707,6 +728,19 @@ const initChart = () => {
       .attr('rx', 4) // 圆角
       .style('pointer-events', 'none') // 确保不会阻挡鼠标事件
   }
+
+  // 在绘制完所有线后，添加一个提升选中线到最前面的逻辑
+  props.series.forEach(s => {
+    if (!s.visible) return
+    
+    const isSelected = props.selectedSeriesId === s.id || props.selectedSeries.includes(s.id)
+    const selector = getSeriesSelector(s.id)
+    const seriesGroup = svg.value.select(`.${selector}`)
+    
+    if (!seriesGroup.empty() && isSelected) {
+      seriesGroup.raise() // 将选中的系列提升到前面
+    }
+  })
 }
 
 // Watch for hover time changes
