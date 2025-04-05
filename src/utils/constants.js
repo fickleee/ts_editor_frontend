@@ -6,6 +6,8 @@ export const BORDER_COLOR = "#EAEAEA";
 
 // 主题色配置
 export const THEME_COLOR = "#8B5FFF";
+// radial画图更改
+// export const THEME_COLOR = "#7EB3BC";
 export const THEME_COLOR_HOVER = "#9D79FF";
 export const THEME_COLOR_LIGHT = "#F5F2FE";
 

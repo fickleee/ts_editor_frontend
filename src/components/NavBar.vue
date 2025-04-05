@@ -772,7 +772,7 @@ const exportEditedData = () => {
 };
 </script> 
 
-<style scoped>
+<style>
 /* 添加禁用拖拽的样式 */
 .no-drag {
   -webkit-user-drag: none;
@@ -786,6 +786,20 @@ const exportEditedData = () => {
   -khtml-user-drag: none;
   -moz-user-drag: none;
   -o-user-drag: none;
+}
+
+/* 修改下拉菜单项样式 */
+.el-dropdown-menu .el-dropdown-menu__item {
+  padding: 8px 16px !important;
+  font-size: 14px !important;
+  color: #606266 !important;
+  transition: all 0.2s ease !important;
+}
+
+.el-dropdown-menu .el-dropdown-menu__item:hover,
+.el-dropdown-menu .el-dropdown-menu__item:focus {
+  background-color: rgba(139, 95, 255, 0.1) !important;
+  color: #8B5FFF !important;
 }
 </style>
 
