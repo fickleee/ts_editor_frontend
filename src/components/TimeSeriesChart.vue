@@ -623,33 +623,41 @@ const initChart = () => {
         const time = xScale.invert(x)
         const value = yScale.invert(y)
         
+        // 确保这个函数执行更轻量
         if (props.multiSelect) {
           const startTime = xScale.invert(dragStartX.value)
-          selections.value.push({
+          const selectionObj = {
             start: Math.min(startTime, time),
             end: Math.max(startTime, time)
-          })
+          }
+          
+          // 添加新选择而不重绘
+          selections.value.push(selectionObj)
           selections.value.sort((a, b) => a.start - b.start)
-          initChart()
+          
+          // 只更新显示选择区域
+          updateSelection(selectionObj)
+          
+          // 发送事件
           emit('selectionComplete', selections.value)
+        } else {
+          // 单选模式，只需要更新选择区域
+          emit('click', time, value)
         }
-        
-        emit('click', time, value)
       }
+      
       dragStartX.value = null
       dragStartY.value = null
       isDragging.value = false
       emit('dragEnd', event)
-
-      // 使用requestAnimationFrame延迟更新，避免阻塞UI
-      requestAnimationFrame(() => {
-        // 在这里更新完整图表，而不是在拖动过程中
-        // 但不要每次都完全重绘
-        if (props.multiSelect) {
-          // 多选模式下可能需要更新选择区域
-          initChart();
-        }
-      });
+      
+      // 使用requestAnimationFrame延迟整个图表的更新
+      if (props.multiSelect) {
+        requestAnimationFrame(() => {
+          // 在拖动完成后再更新整个图表
+          initChart()
+        })
+      }
     })
 
   // Update hover line position if hoverTime prop is provided
@@ -840,6 +848,23 @@ const handleConfirmSelection = () => {
 const handleCancelSelection = () => {
   // Implementation of handleCancelSelection
 }
+
+// 优化防抖处理
+const debouncedUpdate = (fn, delay) => {
+  let timeoutId
+  return function(...args) {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => fn.apply(this, args), delay)
+  }
+}
+
+// 使用防抖而不是节流处理拖动操作
+// 这样在快速拖动时只会在停顿时触发更新
+const debouncedDrag = debouncedUpdate((timeRange) => {
+  if (svg.value) {
+    updateSelection(timeRange)
+  }
+}, 20)
 </script>
 
 <template>
