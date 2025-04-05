@@ -450,45 +450,42 @@ const initChart = () => {
   if (props.multiSelect && selections.value.length > 0) {
     selections.value.forEach((selection, i) => {
       g.append('rect')
-        .attr('class', 'selection')
+        .attr('class', 'selection-rect')
         .attr('x', xScale(selection.start))
         .attr('y', 0)
         .attr('width', xScale(selection.end) - xScale(selection.start))
         .attr('height', height)
-        .attr('fill', 'rgba(147, 51, 234, 0.2)')
-        .attr('stroke', 'rgb(147, 51, 234)')
+        .attr('fill', THEME_COLOR_ALPHA)
+        .attr('stroke', THEME_COLOR)
         .attr('stroke-width', 1)
     })
     
-    // 添加以下代码：当在多选模式且已有选择时，也高亮显示当前选择区域
     if (props.selection) {
-      // 检查当前选择是否已在selections中
       const isAlreadyInSelections = selections.value.some(
         s => s.start === props.selection.start && s.end === props.selection.end
       );
       
-      // 如果不在，也以相同样式显示它
       if (!isAlreadyInSelections) {
         g.append('rect')
-          .attr('class', 'selection')
+          .attr('class', 'selection-rect')
           .attr('x', xScale(props.selection.start))
           .attr('y', 0)
           .attr('width', xScale(props.selection.end) - xScale(props.selection.start))
           .attr('height', height)
-          .attr('fill', 'rgba(147, 51, 234, 0.2)')
-          .attr('stroke', 'rgb(147, 51, 234)')
+          .attr('fill', THEME_COLOR_ALPHA)
+          .attr('stroke', THEME_COLOR)
           .attr('stroke-width', 1)
       }
     }
   } else if (props.selection) {
     g.append('rect')
-      .attr('class', 'selection')
+      .attr('class', 'selection-rect')
       .attr('x', xScale(props.selection.start))
       .attr('y', 0)
       .attr('width', xScale(props.selection.end) - xScale(props.selection.start))
       .attr('height', height)
-      .attr('fill', 'rgba(147, 51, 234, 0.2)')
-      .attr('stroke', 'rgb(147, 51, 234)')
+      .attr('fill', THEME_COLOR_ALPHA)
+      .attr('stroke', THEME_COLOR)
       .attr('stroke-width', 1)
   }
 
@@ -550,32 +547,36 @@ const initChart = () => {
       const time = xScale.invert(x);
       const value = yScale.invert(y);
       
+      // 设置指针样式
       if (props.selection && (props.activeTool === 'move-x' || props.activeTool === 'move-y')) {
-        const isInSelection = time >= props.selection.start && time <= props.selection.end
-        overlay.style('cursor', isInSelection ? (props.activeTool === 'move-x' ? 'ew-resize' : 'ns-resize') : 'default')
+        // 增加选中区域的边缘容差，使移动更容易触发
+        const edgeThreshold = props.activeTool === 'move-x' ? 0.15 : 0.05; // move-x提高灵敏度
+        const isInSelection = time >= (props.selection.start - edgeThreshold) && 
+                              time <= (props.selection.end + edgeThreshold);
+        
+        overlay.style('cursor', isInSelection ? 
+          (props.activeTool === 'move-x' ? 'ew-resize' : 'ns-resize') : 'default');
       } else {
-        overlay.style('cursor', 'default')
+        overlay.style('cursor', 'default');
       }
 
       hoverLine
         .attr('x1', x)
         .attr('x2', x)
-        .style('display', null)
+        .style('display', null);
 
       hoverLabel
         .attr('x', x)
         .text(formatTime(time))
-        .style('display', null)
+        .style('display', null);
 
       if (props.isMainChart) {
         hoverValue
           .attr('y', y)
           .text(value.toFixed(2))
-          .style('display', null)
-      }
-
-      if (props.isMainChart) {
-        emit('hover', time)
+          .style('display', null);
+        
+        emit('hover', time);
       }
 
       // 如果正在拖动，更新选择区域
@@ -600,7 +601,7 @@ const initChart = () => {
           end: Math.max(startValue, value)
         }, { x, y });
       }
-    }, 16)) // 使用16ms节流(约60FPS)，提供更流畅的体验
+    }, 10)) // 降低到10ms提高响应性，特别是对move-x和move-y
     .on('mouseleave', () => {
       hoverLine.style('display', 'none')
       hoverLabel.style('display', 'none')
@@ -619,44 +620,47 @@ const initChart = () => {
     })
     .on('mouseup', (event) => {
       if (dragStartX.value !== null) {
-        const [x, y] = d3.pointer(event)
-        const time = xScale.invert(x)
-        const value = yScale.invert(y)
+        const [x, y] = d3.pointer(event);
+        const time = xScale.invert(x);
+        const value = yScale.invert(y);
         
         // 确保这个函数执行更轻量
         if (props.multiSelect) {
-          const startTime = xScale.invert(dragStartX.value)
+          const startTime = xScale.invert(dragStartX.value);
           const selectionObj = {
             start: Math.min(startTime, time),
             end: Math.max(startTime, time)
-          }
+          };
           
           // 添加新选择而不重绘
-          selections.value.push(selectionObj)
-          selections.value.sort((a, b) => a.start - b.start)
+          selections.value.push(selectionObj);
+          selections.value.sort((a, b) => a.start - b.start);
           
           // 只更新显示选择区域
-          updateSelection(selectionObj)
+          updateSelection(selectionObj);
           
           // 发送事件
-          emit('selectionComplete', selections.value)
+          emit('selectionComplete', selections.value);
         } else {
           // 单选模式，只需要更新选择区域
-          emit('click', time, value)
+          emit('click', time, value);
         }
       }
       
-      dragStartX.value = null
-      dragStartY.value = null
-      isDragging.value = false
-      emit('dragEnd', event)
+      // 确保在这里完成所有拖动操作，包括move-x和move-y
+      const isMoveTool = props.activeTool === 'move-x' || props.activeTool === 'move-y';
+      
+      dragStartX.value = null;
+      dragStartY.value = null;
+      isDragging.value = false;
+      emit('dragEnd', event);
       
       // 使用requestAnimationFrame延迟整个图表的更新
-      if (props.multiSelect) {
+      if (props.multiSelect || isMoveTool) {
         requestAnimationFrame(() => {
           // 在拖动完成后再更新整个图表
-          initChart()
-        })
+          initChart();
+        });
       }
     })
 
@@ -775,7 +779,13 @@ const initChart = () => {
   })
 }
 
-// 修改 updateSelection 函数，使其更高效
+// 1. 使用统一的主题色常量
+const THEME_COLOR = "#8B5FFF";
+const THEME_COLOR_ALPHA = "rgba(139, 95, 255, 0.2)"; // 带透明度的主题色
+const SELECTION_FILL = THEME_COLOR_ALPHA;
+const SELECTION_STROKE = THEME_COLOR;
+
+// 2. 修改 updateSelection 函数，确保框选时背景颜色保持不变
 const updateSelection = (timeRange) => {
   if (!svg.value || !timeRange) return;
   
@@ -783,7 +793,6 @@ const updateSelection = (timeRange) => {
   const height = chartRef.value.clientHeight - margin.top - margin.bottom;
   const xScale = d3.scaleLinear().domain([0, 24]).range([0, width]);
   
-  // 查找选择组，如果不存在则创建
   let selectionGroup = svg.value.select('.selection-group');
   if (selectionGroup.empty()) {
     selectionGroup = svg.value.append('g')
@@ -791,17 +800,16 @@ const updateSelection = (timeRange) => {
       .attr('transform', `translate(${margin.left},${margin.top})`);
   }
   
-  // 查找或创建选择矩形
   let selectionRect = selectionGroup.select('.selection-rect');
   if (selectionRect.empty()) {
     selectionRect = selectionGroup.append('rect')
       .attr('class', 'selection-rect')
-      .attr('fill', 'rgba(147, 51, 234, 0.2)')
-      .attr('stroke', 'rgb(147, 51, 234)')
+      .attr('fill', SELECTION_FILL)
+      .attr('stroke', SELECTION_STROKE)
       .attr('stroke-width', 1);
   }
   
-  // 更新矩形位置和大小
+  // 只更新位置和大小，不修改颜色属性
   selectionRect
     .attr('x', xScale(timeRange.start))
     .attr('y', 0)
@@ -898,6 +906,20 @@ const debouncedDrag = debouncedUpdate((timeRange) => {
 </template>
 
 <style scoped>
+/* 更新选择区域样式 */
+.selection-rect {
+  pointer-events: none;
+}
+
+/* 修改老的selection类，确保与主题色匹配 */
+.selection {
+  fill: rgba(139, 95, 255, 0.2) !important; /* 使用主题色 */
+  stroke: #8B5FFF !important;
+  stroke-width: 1;
+  stroke-dasharray: 4,4;
+}
+
+/* 其他样式保持不变 */
 .hover-line {
   pointer-events: none;
   stroke-width: 1;
@@ -914,13 +936,6 @@ const debouncedDrag = debouncedUpdate((timeRange) => {
 .hover-label {
   background: white;
   padding: 2px 4px;
-}
-
-.selection {
-  fill: rgba(124, 58, 237, 0.1);
-  stroke: #7C3AED;
-  stroke-width: 1;
-  stroke-dasharray: 4,4;
 }
 
 .time-divider {
