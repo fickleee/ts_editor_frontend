@@ -1319,7 +1319,7 @@ const isLoadingPatterns = ref(false)
               }"
             >
               <p class="text-2xl text-black font-bold tracking-wide">
-                Please drag data in matrix view here to add time series for editing
+                Please drag data here to add time series for editing
               </p>
             </div>
           </div>
