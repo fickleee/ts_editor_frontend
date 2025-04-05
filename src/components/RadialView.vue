@@ -128,7 +128,6 @@ const updateSliderWidth = () => {
   if (!chartContainer.value) return;
   
   const containerWidth = chartContainer.value.clientWidth;
-  console.log(containerWidth);
   
   // 根据容器宽度动态调整，增加各个尺寸下的宽度比例
   if (containerWidth < 600) {

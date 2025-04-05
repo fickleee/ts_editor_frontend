@@ -13,6 +13,8 @@ const API = {
   GET_DATA_CLUSTER_URL: '/data/cluster',
   // 复合接口
   GET_DATA_MIX_URL: '/data/mix',
+  // 分解接口
+  POST_DECOMPOSE_URL: '/decompose',
 }
 
 export const reqDataOriginal = (dataset) => request.get(API.GET_DATA_ORIGINAL_URL + `?dataset=${dataset}`)  
@@ -26,3 +28,20 @@ export const reqDataDistribution = (dataset) => request.get(API.GET_DATA_DISTRIB
 export const reqDataProjection = (dataset, model, aggregation) => request.get(API.GET_DATA_PROJECTION_URL + `?dataset=${dataset}&model=${model}&aggregation=${aggregation}`)  
 export const reqDataCluster = (dataset, variable, model, aggregation, eps) => request.get(API.GET_DATA_CLUSTER_URL + `?dataset=${dataset}&variable=${variable}&model=${model}&aggregation=${aggregation}&eps=${eps}`)  
 export const reqDataMix = (dataset, variable = 'null', dayType = 'day') => request.get(API.GET_DATA_MIX_URL + `?dataset=${dataset}&variable=${variable}&dayType=${dayType}`)  
+
+// 分解接口
+export const reqDecomposeSeries = (values, options) => {
+  return request.post(API.POST_DECOMPOSE_URL, {
+    values: values.map(point => point.value),
+    decomp_number: options.decompositionNumber || 2,
+    model: options.model,
+    level: options.level,
+    method: options.method
+  }).catch(error => {
+    console.error('分解请求出错:', error);
+    return Promise.resolve({
+      data: null,
+      error: error.message || '分解处理失败'
+    });
+  });
+}  
