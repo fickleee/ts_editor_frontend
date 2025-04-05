@@ -437,26 +437,14 @@ const initChart = () => {
       .attr('d', line)
       .attr('clip-path', 'url(#clip)')
     
-    if (props.isMainChart) {
-      seriesGroup.append('path')
-        .datum(processSeriesData(s))
-        .attr('class', 'line-hover-area')
-        .attr('fill', 'none')
-        .attr('stroke', 'transparent')
-        .attr('stroke-width', 20)
-        .attr('d', line)
-        .attr('data-series-id', s.id)
-        .style('cursor', 'pointer')
-        .on('click', (event) => {
-          event.stopPropagation()
-          emit('seriesClick', s.id)
-        })
-    }
-    
     if ((s.id === props.hoveredSeriesId || s.id === props.selectedSeriesId) && props.isMainChart) {
       seriesGroup.raise()
     }
   })
+
+  // Create a selection group
+  const selectionGroup = g.append('g')
+    .attr('class', 'selection-group')
 
   // Add selection highlights
   if (props.multiSelect && selections.value.length > 0) {
@@ -542,12 +530,25 @@ const initChart = () => {
     .attr('fill', 'none')
     .style('pointer-events', 'all')
 
-  // Handle mouse events
+  // Add节流函数，减少更新频率
+  const throttle = (fn, delay) => {
+    let lastCall = 0;
+    return function(...args) {
+      const now = new Date().getTime();
+      if (now - lastCall < delay) {
+        return;
+      }
+      lastCall = now;
+      return fn(...args);
+    };
+  };
+
+  // 修改 overlay.on('mousemove') 处理函数，应用节流
   overlay
-    .on('mousemove', (event) => {
-      const [x, y] = d3.pointer(event)
-      const time = xScale.invert(x)
-      const value = yScale.invert(y)
+    .on('mousemove', throttle((event) => {
+      const [x, y] = d3.pointer(event);
+      const time = xScale.invert(x);
+      const value = yScale.invert(y);
       
       if (props.selection && (props.activeTool === 'move-x' || props.activeTool === 'move-y')) {
         const isInSelection = time >= props.selection.start && time <= props.selection.end
@@ -577,18 +578,29 @@ const initChart = () => {
         emit('hover', time)
       }
 
+      // 如果正在拖动，更新选择区域
       if (isDragging.value && dragStartX.value !== null) {
-        const startTime = xScale.invert(dragStartX.value)
-        const startValue = dragStartY.value ? yScale.invert(dragStartY.value) : 0
+        const startTime = xScale.invert(dragStartX.value);
+        const startValue = dragStartY.value ? yScale.invert(dragStartY.value) : 0;
+        
+        // 仅在拖动时更新选择区域，不触发其他计算
+        if (props.isMainChart) {
+          updateSelection({
+            start: Math.min(startTime, time),
+            end: Math.max(startTime, time)
+          });
+        }
+        
+        // 拖动过程中只发送最小必要信息
         emit('drag', {
           start: Math.min(startTime, time),
           end: Math.max(startTime, time)
         }, {
           start: Math.min(startValue, value),
           end: Math.max(startValue, value)
-        }, { x, y })
+        }, { x, y });
       }
-    })
+    }, 16)) // 使用16ms节流(约60FPS)，提供更流畅的体验
     .on('mouseleave', () => {
       hoverLine.style('display', 'none')
       hoverLabel.style('display', 'none')
@@ -628,6 +640,16 @@ const initChart = () => {
       dragStartY.value = null
       isDragging.value = false
       emit('dragEnd', event)
+
+      // 使用requestAnimationFrame延迟更新，避免阻塞UI
+      requestAnimationFrame(() => {
+        // 在这里更新完整图表，而不是在拖动过程中
+        // 但不要每次都完全重绘
+        if (props.multiSelect) {
+          // 多选模式下可能需要更新选择区域
+          initChart();
+        }
+      });
     })
 
   // Update hover line position if hoverTime prop is provided
@@ -745,115 +767,49 @@ const initChart = () => {
   })
 }
 
-// Watch for hover time changes
-watch(() => props.hoverTime, (newTime) => {
-  if (!svg.value) return
+// 修改 updateSelection 函数，使其更高效
+const updateSelection = (timeRange) => {
+  if (!svg.value || !timeRange) return;
   
-  const width = chartRef.value.clientWidth - margin.left - margin.right
-  const xScale = d3.scaleLinear()
-    .domain([0, 24])
-    .range([0, width])
-    
-  const hoverLine = svg.value.select('.hover-line')
+  const width = chartRef.value.clientWidth - margin.left - margin.right;
+  const height = chartRef.value.clientHeight - margin.top - margin.bottom;
+  const xScale = d3.scaleLinear().domain([0, 24]).range([0, width]);
   
-  if (newTime !== null) {
-    const x = xScale(newTime)
-    hoverLine
-      .attr('x1', x)
-      .attr('x2', x)
-      .style('display', null)
-  } else {
-    hoverLine.style('display', 'none')
+  // 查找选择组，如果不存在则创建
+  let selectionGroup = svg.value.select('.selection-group');
+  if (selectionGroup.empty()) {
+    selectionGroup = svg.value.append('g')
+      .attr('class', 'selection-group')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
   }
-}, { immediate: true })
-
-// Add a new watch for selectedSeriesId to update colors when selection changes
-watch(() => props.selectedSeriesId, (newId, oldId) => {
-  if (!svg.value || !props.isMainChart) return
   
-  props.series.forEach(s => {
-    if (!s.visible) return
-    
-    const isSelected = newId === s.id
-    const wasSelected = oldId === s.id
-    const selector = getSeriesSelector(s.id)
-    const seriesGroup = svg.value.select(`.${selector}`)
-    
-    if (!seriesGroup.empty()) {
-      seriesGroup.select('.line')
-        .attr('stroke', isSelected ? '#D4A554' : '#ABABAB')
-      
-      if (isSelected) {
-        seriesGroup.raise()
-      }
-    }
-    
-    // If selection changed, we need to redraw to ensure proper coloring
-    if (isSelected !== wasSelected) {
-      // Schedule a refresh to ensure color changes stick
-      setTimeout(() => {
-        const currentStroke = seriesGroup.select('.line').attr('stroke')
-        seriesGroup.select('.line').attr('stroke', currentStroke)
-      }, 10)
-    }
-  })
-}, { immediate: true })
-
-// Modify existing hoveredSeriesId watch to respect selection state
-watch(() => props.hoveredSeriesId, (newId) => {
-  if (!svg.value || !props.isMainChart) return
-  
-  // 先处理所有非hover的序列
-  props.series.forEach(s => {
-    if (!s.visible) return
-    
-    const isHovered = newId === s.id
-    const isSelected = s.id === props.selectedSeriesId || props.selectedSeries.includes(s.id)
-    const selector = getSeriesSelector(s.id)
-    const seriesGroup = svg.value.select(`.${selector}`)
-    
-    if (!seriesGroup.empty()) {
-      seriesGroup.select('.line')
-        .attr('stroke-width', isHovered ? 3 : 2)
-        .attr('stroke', isHovered || isSelected ? '#D4A554' : '#ABABAB')
-    }
-  })
-  
-  // 如果有hover的序列，确保它在最后处理并提升到最前
-  if (newId) {
-    const hoveredSelector = getSeriesSelector(newId)
-    const hoveredGroup = svg.value.select(`.${hoveredSelector}`)
-    
-    if (!hoveredGroup.empty()) {
-      hoveredGroup.raise() // 将hover的序列提升到最前
-    }
+  // 查找或创建选择矩形
+  let selectionRect = selectionGroup.select('.selection-rect');
+  if (selectionRect.empty()) {
+    selectionRect = selectionGroup.append('rect')
+      .attr('class', 'selection-rect')
+      .attr('fill', 'rgba(147, 51, 234, 0.2)')
+      .attr('stroke', 'rgb(147, 51, 234)')
+      .attr('stroke-width', 1);
   }
-}, { immediate: true })
-
-// Add new watch for selectedSeries array (for multi-select cases)
-watch(() => props.selectedSeries, (newSelectedSeries) => {
-  if (!svg.value || !props.isMainChart) return
   
-  props.series.forEach(s => {
-    if (!s.visible) return
-    
-    const isSelected = newSelectedSeries.includes(s.id)
-    const selector = getSeriesSelector(s.id)
-    const seriesGroup = svg.value.select(`.${selector}`)
-    
-    if (!seriesGroup.empty()) {
-      seriesGroup.select('.line')
-        .attr('stroke', isSelected ? '#D4A554' : '#ABABAB')
-      
-      if (isSelected) {
-        seriesGroup.raise()
-      }
-    }
-  })
-}, { deep: true, immediate: true })
+  // 更新矩形位置和大小
+  selectionRect
+    .attr('x', xScale(timeRange.start))
+    .attr('y', 0)
+    .attr('width', xScale(timeRange.end) - xScale(timeRange.start))
+    .attr('height', height);
+}
 
+// 修改 watch 函数，避免不必要的重新渲染
+watch(() => props.selection, (newSelection) => {
+  if (newSelection && svg.value) {
+    updateSelection(newSelection);
+  }
+}, { deep: true });
+
+// 只在必要时重新初始化图表
 watch(() => props.series, initChart, { deep: true })
-watch(() => props.selection, initChart)
 watch(() => props.multiSelect, (newValue) => {
   if (!newValue) {
     selections.value = []

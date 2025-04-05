@@ -715,32 +715,8 @@ const handleDragEnd = (event) => {
 }
 
 const handleSeriesClick = (seriesId) => {
-  const seriesObj = store.series.find(s => s.id === seriesId);
-  
-  // 如果序列不可见，则不能选择
-  if (seriesObj && !seriesObj.visible) {
-    return;
-  }
-  
-  // 如果当前序列已经被选中，则取消选择
-  if (selectedSeriesId.value === seriesId) {
-    selectedSeriesId.value = null;
-    // 如果store中有选中的时间范围，只清除选中的系列而保留时间范围
-    if (store.selectedTimeRange) {
-      store.setSelection(store.selectedTimeRange, []);
-    } else {
-      store.clearSelection();
-    }
-    return;
-  }
-  
-  // 否则，选择新的序列
-  selectedSeriesId.value = seriesId;
-  
-  // 如果有选中的时间范围，更新store中的选中系列
-  if (store.selectedTimeRange) {
-    store.setSelection(store.selectedTimeRange, [seriesId]);
-  }
+  // 完全禁用点击曲线选中功能
+  return; // 直接返回，不执行任何操作
 }
 
 const handleSeriesHover = (seriesId, isHovering) => {

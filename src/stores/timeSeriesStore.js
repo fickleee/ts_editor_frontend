@@ -211,7 +211,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
             
             newData[i] = {
               time: point.time + offset.x,
-              value: Math.min(15000, newValue)
+              value: newValue
             };
           }
         })
@@ -254,7 +254,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
           
           newData[i] = {
             time: point.time + offset.x,
-            value: Math.min(15000, newValue)
+            value: newValue
           };
         }
       })
@@ -1275,7 +1275,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
             
             newData[i] = {
               time: point.time + offset.x,
-              value: Math.min(15000, newValue)
+              value: newValue
             };
           }
         });
@@ -1318,7 +1318,7 @@ export const useTimeSeriesStore = defineStore('timeSeries', () => {
           
           newData[i] = {
             time: point.time + offset.x,
-            value: Math.min(15000, newValue)
+            value: newValue
           };
         }
       });
