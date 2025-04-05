@@ -711,7 +711,9 @@ const initChart = () => {
   }
 
   // 为多序列编辑添加高亮效果
-  if (props.multiSelect && props.selection && props.isMainChart && props.selectedSeries && props.selectedSeries.length > 1) {
+  if (props.multiSelect && props.selection && props.isMainChart && 
+      props.selectedSeries && props.selectedSeries.length > 1 && 
+      props.activeTool !== 'expand') {
     const { start, end } = props.selection
     
     // 创建多序列高亮矩形
@@ -801,6 +803,7 @@ watch(() => props.selectedSeriesId, (newId, oldId) => {
 watch(() => props.hoveredSeriesId, (newId) => {
   if (!svg.value || !props.isMainChart) return
   
+  // 先处理所有非hover的序列
   props.series.forEach(s => {
     if (!s.visible) return
     
@@ -813,12 +816,18 @@ watch(() => props.hoveredSeriesId, (newId) => {
       seriesGroup.select('.line')
         .attr('stroke-width', isHovered ? 3 : 2)
         .attr('stroke', isHovered || isSelected ? '#D4A554' : '#ABABAB')
-      
-      if (isHovered) {
-        seriesGroup.raise()
-      }
     }
   })
+  
+  // 如果有hover的序列，确保它在最后处理并提升到最前
+  if (newId) {
+    const hoveredSelector = getSeriesSelector(newId)
+    const hoveredGroup = svg.value.select(`.${hoveredSelector}`)
+    
+    if (!hoveredGroup.empty()) {
+      hoveredGroup.raise() // 将hover的序列提升到最前
+    }
+  }
 }, { immediate: true })
 
 // Add new watch for selectedSeries array (for multi-select cases)

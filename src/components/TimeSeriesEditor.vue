@@ -606,28 +606,29 @@ const handleGenerateSelect = (pattern) => {
 
 const handleGenerateApply = () => {
   if (!selectedPattern.value || !selectedSeriesId.value) {
-    return;
+    ElMessage.warning('Please select a pattern first')
+    return
   }
   
-  // 执行替换
-  store.replaceWithPattern(
-    selectedSeriesId.value, 
-    selectedPattern.value, 
-    store.selectedTimeRange
-  );
+  // 应用模式前记录状态
+  const beforeState = store.getSeriesSnapshot([selectedSeriesId.value])
   
-  // 操作完成后，重置状态
-  selectedPattern.value = null;
+  // 应用替换操作
+  store.replaceWithPattern(selectedPattern.value, selectedSeriesId.value)
   
-  // 清空候选项列表
-  generatePatterns.value = [];
+  // 记录操作完成，提供清晰的反馈
+  ElMessage.success(`Pattern from user ${selectedPattern.value.userId} applied successfully`)
   
-  // 重置工具状态
-  activeTool.value = null;
-  tools.value.forEach(tool => tool.active = false);
+  // 清除选择和预览
+  selectedPattern.value = null
+  store.clearPreviewSeries()
   
-  // 提示用户操作成功
-  ElMessage.success('Pattern applied successfully');
+  // 清除候选项列表
+  generatePatterns.value = []
+  
+  // 关闭工具
+  activeTool.value = null
+  tools.value.forEach(tool => tool.active = false)
 }
 
 const handleGenerateReset = () => {
@@ -1373,7 +1374,7 @@ const isLoadingPatterns = ref(false)
               }"
             >
               <p class="text-2xl text-black font-bold tracking-wide">
-                Please drag data here to add time series for editing
+                Please drag data in matrix view here to add time series for editing
               </p>
             </div>
           </div>

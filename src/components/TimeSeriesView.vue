@@ -1,13 +1,14 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import SeriesViewChart from './SeriesViewChart.vue'
+import TimeSeriesChart from './TimeSeriesChart.vue'
 import { downloadCSV } from '../utils/csvUtils'
+import { api } from '../services/api'
 import { useTimeSeriesStore } from '../stores/timeSeriesStore'
 import { ElMessage, ElScrollbar, ElSlider } from 'element-plus'
 import { getRandomColor, getColorByType } from '../utils/uiUtils'
 import { useDatasetStore } from '../stores/datasetStore'
 import { THEME_COLOR, THEME_COLOR_HOVER, THEME_COLOR_LIGHT } from '../utils/constants'
-import { reqDecomposeSeries } from '../api'
 
 const props = defineProps({
   series: Object,
@@ -222,23 +223,15 @@ const applyDecomposition = async () => {
     const values = props.series.data.map(point => point.value);
     
     // Use the dedicated decomposition method
-    // const response = await api.decomposeSeries(props.series.data, {
-    //   decompositionNumber: decompositionNumber.value,
-    //   model: model.value,
-    //   level: level.value,
-    //   method: 'wavelet'
-    // });
-    const response = await reqDecomposeSeries(props.series.data, {
+    const response = await api.decomposeSeries(props.series.data, {
       decompositionNumber: decompositionNumber.value,
       model: model.value,
       level: level.value,
       method: 'wavelet'
     });
-    console.log(response);
-    
     
     // Process response
-    if (response) {
+    if (response.data) {
       // Clear any existing decomposed series
       decomposedSeries.value = [];
       
@@ -256,7 +249,7 @@ const applyDecomposition = async () => {
       const components = [];
       
       // Process each component from the response
-      Object.entries(response).forEach(([key, values]) => {
+      Object.entries(response.data).forEach(([key, values]) => {
         // Skip the original data
         if (key === 'original') return;
         
