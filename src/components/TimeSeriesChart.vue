@@ -455,8 +455,8 @@ const initChart = () => {
         .attr('y', 0)
         .attr('width', xScale(selection.end) - xScale(selection.start))
         .attr('height', height)
-        .attr('fill', THEME_COLOR_ALPHA)
-        .attr('stroke', THEME_COLOR)
+        .attr('fill', SELECTION_FILL)
+        .attr('stroke', SELECTION_STROKE)
         .attr('stroke-width', 1)
     })
     
@@ -472,8 +472,8 @@ const initChart = () => {
           .attr('y', 0)
           .attr('width', xScale(props.selection.end) - xScale(props.selection.start))
           .attr('height', height)
-          .attr('fill', THEME_COLOR_ALPHA)
-          .attr('stroke', THEME_COLOR)
+          .attr('fill', SELECTION_FILL)
+          .attr('stroke', SELECTION_STROKE)
           .attr('stroke-width', 1)
       }
     }
@@ -484,8 +484,8 @@ const initChart = () => {
       .attr('y', 0)
       .attr('width', xScale(props.selection.end) - xScale(props.selection.start))
       .attr('height', height)
-      .attr('fill', THEME_COLOR_ALPHA)
-      .attr('stroke', THEME_COLOR)
+      .attr('fill', SELECTION_FILL)
+      .attr('stroke', SELECTION_STROKE)
       .attr('stroke-width', 1)
   }
 
@@ -765,16 +765,17 @@ const initChart = () => {
       .style('pointer-events', 'none') // 确保不会阻挡鼠标事件
   }
 
-  // 在绘制完所有线后，添加一个提升选中线到最前面的逻辑
+  // 在绘制完所有线后，添加一个提升选中线和悬停线到最前面的逻辑
   props.series.forEach(s => {
     if (!s.visible) return
     
     const isSelected = props.selectedSeriesId === s.id || props.selectedSeries.includes(s.id)
+    const isHovered = props.hoveredSeriesId === s.id
     const selector = getSeriesSelector(s.id)
     const seriesGroup = svg.value.select(`.${selector}`)
     
-    if (!seriesGroup.empty() && isSelected) {
-      seriesGroup.raise() // 将选中的系列提升到前面
+    if (!seriesGroup.empty() && (isSelected || isHovered)) {
+      seriesGroup.raise() // 将选中或悬停的系列提升到前面
     }
   })
 }
@@ -906,15 +907,15 @@ const debouncedDrag = debouncedUpdate((timeRange) => {
 </template>
 
 <style scoped>
-/* 更新选择区域样式 */
+/* 更新选择区域样式，移除颜色覆盖 */
 .selection-rect {
   pointer-events: none;
+  /* 移除任何颜色定义，让内联样式生效 */
 }
 
-/* 修改老的selection类，确保与主题色匹配 */
+/* 修改旧的 selection 类，移除 !important */
 .selection {
-  fill: rgba(139, 95, 255, 0.2) !important; /* 使用主题色 */
-  stroke: #8B5FFF !important;
+  /* 移除颜色相关属性，避免样式冲突 */
   stroke-width: 1;
   stroke-dasharray: 4,4;
 }
