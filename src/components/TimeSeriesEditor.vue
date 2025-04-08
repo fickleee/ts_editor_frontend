@@ -9,6 +9,10 @@ import { ElMessage } from 'element-plus'
 import { BORDER_WIDTH, BORDER_COLOR, THEME_COLOR, THEME_COLOR_HOVER } from '../utils/constants'
 import { generateHouseData } from '../utils/generateData'
 import PatternChart from './PatternChart.vue'
+import iconMap from '../utils/icons'
+
+// 可选封装：安全获取图标
+const getIcon = (name) => iconMap[name?.toLowerCase()] || ''
 
 const store = useTimeSeriesStore()
 
@@ -1139,7 +1143,7 @@ const isLoadingPatterns = ref(false)
                 :title="tool.name"
                 :disabled="selectionPending"
               >
-                <img :src="`/src/assets/${tool.icon}`" :alt="tool.name" class="w-[36px] h-[36px]" draggable="false" />
+                <img :src="getIcon(tool.id)" :alt="tool.name" class="w-[36px] h-[36px]" draggable="false" />
               </button>
               
               <!-- 只在第1个和第3个按钮后添加分隔线 -->
@@ -1194,14 +1198,14 @@ const isLoadingPatterns = ref(false)
                 class="p-1 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-green-300" 
                 title="Apply"
               >
-                <img src="/src/assets/apply.svg" alt="Apply" class="w-5 h-5" />
+                <img src="@/assets/apply.svg" alt="Apply" class="w-5 h-5" />
               </button>
               <button 
                 @click="cancelSelection" 
                 class="p-1 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-red-300" 
                 title="Cancel"
               >
-                <img src="/src/assets/cancel.svg" alt="Cancel" class="w-5 h-5" />
+                <img src="@/assets/cancel.svg" alt="Cancel" class="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -1248,7 +1252,7 @@ const isLoadingPatterns = ref(false)
                     class="p-2 transition-all duration-150 hover:scale-110"
                     title="Reset"
                   >
-                    <img src="/src/assets/cancel.svg" alt="Reset" class="w-6 h-6" />
+                    <img src="@/assets/cancel.svg" alt="Reset" class="w-6 h-6" />
                   </button>
                   <button
                     @click="handleCurveApply"
@@ -1256,7 +1260,7 @@ const isLoadingPatterns = ref(false)
                     :disabled="!previewCurve"
                     title="Apply"
                   >
-                    <img src="/src/assets/apply.svg" alt="Apply" class="w-6 h-6" />
+                    <img src="@/assets/apply.svg" alt="Apply" class="w-6 h-6" />
                   </button>
                 </div>
               </div>
@@ -1316,7 +1320,7 @@ const isLoadingPatterns = ref(false)
                     class="p-0.5 rounded-full border border-gray-200 bg-white flex items-center justify-center w-7 h-7 hover:border-red-300"
                     title="Cancel"
                   >
-                    <img src="/src/assets/cancel.svg" alt="Cancel" class="w-5 h-5" />
+                    <img src="@/assets/cancel.svg" alt="Cancel" class="w-5 h-5" />
                   </button>
                   
                   <button

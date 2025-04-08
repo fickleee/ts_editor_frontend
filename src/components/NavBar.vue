@@ -223,7 +223,6 @@ import { BORDER_WIDTH, BORDER_COLOR, THEME_COLOR, WEEKDAY_COLOR, WEEKEND_COLOR }
 import { useDatasetStore } from '../stores/datasetStore';
 import { useTimeSeriesStore } from '../stores/timeSeriesStore';
 import { ElMessage } from 'element-plus';
-import { downloadCSV } from '../utils/csvUtils';
 
 const datasetStore = useDatasetStore();
 const timeSeriesStore = useTimeSeriesStore();

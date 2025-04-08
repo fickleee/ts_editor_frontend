@@ -5,7 +5,11 @@ import { fileURLToPath, URL } from 'node:url'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   let env = loadEnv(mode, process.cwd())
+  // 设置 base 路径（本地用 '/'，生产用 '/仓库名/'）
+  const isProduction = mode === 'production'
+  const base = isProduction ? '/ts_editor_frontend/' : '/'
   return {
+    base,
     plugins: [vue()],
     resolve: {
       alias: {
